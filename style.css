@@ -835,17 +835,11 @@ input:checked + .slider:before { transform: translateX(20px); }
 .reward-channels-list { display: flex; flex-direction: column; gap: 12px; }
 .reward-channel-card {
     display: flex; align-items: center; gap: 12px;
-    background: var(--card-bg); border-radius: 18px; padding: 12px 14px;
+    background: var(--card-bg); border-radius: 18px; padding: 14px 16px;
     box-shadow: var(--shadow-sm);
 }
-.reward-channel-icon {
-    width: 44px; height: 44px; border-radius: 12px;
-    background: var(--bg-main);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.4rem; flex-shrink: 0;
-}
 .reward-channel-info { flex: 1; min-width: 0; }
-.reward-channel-name { font-size: 0.92rem; font-weight: 600; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reward-channel-name { font-size: 0.95rem; font-weight: 800; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reward-channel-coins { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
 .reward-channel-btn { padding: 9px 16px; font-size: 0.85rem; border-radius: 12px; flex-shrink: 0; }
 .reward-btn-join { background: #ffcc00; color: #1c1c1e; }
