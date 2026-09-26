@@ -241,6 +241,15 @@ const GameState = {
     settings: { sound: true, darkMode: false, gender: null, avatarId: null, displayName: null },
     dailyChallenge: { lastCompletedDate: null, completedCount: 0 },
     joinGate: { confirmedChannelId: null, confirmedWeekNumber: null },
+    // amount roozane: weekStartKey/claimedDaysThisWeek برای نمایش هفته‌ی
+    // جاری، lastGrantedDateKey یک محافظ یکنواخت (monotonic) اضافه‌ست تا
+    // عقب کشیدن ساعت دستگاه نتونه یک روز/هفته‌ی قبلاً گرفته‌شده رو دوباره
+    // باز کنه (توضیح کامل جلوی تابع syncDailyRewardWeek). channels: شناسه‌ی
+    // کارت‌های پاداش کانالی که برای همیشه گرفته شده‌اند.
+    rewards: {
+        daily: { weekStartKey: null, claimedDaysThisWeek: [], lastGrantedDateKey: null },
+        channels: {}
+    },
     isDailyChallenge: false,
     activeCategory: null,
     activeLevelIndex: 0,
@@ -457,7 +466,8 @@ const StorageManager = {
             unlockedMedals: GameState.unlockedMedals,
             settings: GameState.settings,
             dailyChallenge: GameState.dailyChallenge,
-            joinGate: GameState.joinGate
+            joinGate: GameState.joinGate,
+            rewards: GameState.rewards
         });
         localStorage.setItem(this.getKey(), payload);
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
@@ -496,6 +506,14 @@ const StorageManager = {
                 GameState.settings = { ...GameState.settings, ...(data.settings || {}) };
                 GameState.dailyChallenge = data.dailyChallenge || { lastCompletedDate: null, completedCount: 0 };
                 GameState.joinGate = data.joinGate || { confirmedChannelId: null, confirmedWeekNumber: null };
+                // با ...(اسپرد) روی مقدار پیش‌فرض merge می‌کنیم، نه جایگزینی
+                // کامل، تا کاربرهایی که از قبل دیتا دارن ولی این فیلد رو
+                // ندارن (نسخه‌ی قبل از این آپدیت) خطا نگیرن و مقدار پیش‌فرض
+                // امن جایگزین بشه.
+                GameState.rewards = {
+                    daily: { weekStartKey: null, claimedDaysThisWeek: [], lastGrantedDateKey: null, ...(data.rewards && data.rewards.daily) },
+                    channels: (data.rewards && data.rewards.channels) || {}
+                };
                 this.ready = true;
             } catch (e) {
                 // دیتا وجود داشت ولی خراب/ناسازگار بود؛ به‌جای رفتن به مقادیر
@@ -1606,6 +1624,13 @@ function setupEvents() {
     });
 
     document.getElementById('btn-open-settings').addEventListener('click', () => { AudioEngine.tap(); document.getElementById('modal-settings').classList.remove('hidden'); });
+    document.getElementById('btn-open-rewards').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-settings').classList.add('hidden');
+        renderRewardsModal();
+        document.getElementById('modal-rewards').classList.remove('hidden');
+    });
+    document.getElementById('btn-claim-daily-reward').addEventListener('click', claimDailyReward);
     document.getElementById('btn-open-changelog').addEventListener('click', () => {
         AudioEngine.tap();
         document.getElementById('modal-settings').classList.add('hidden');
@@ -1711,6 +1736,228 @@ function checkForUpdates() {
         renderChangelog(false);
         document.getElementById('modal-changelog').classList.remove('hidden');
     }
+}
+
+/* =========================================
+   8. امتیاز و پاداش (Daily Reward + Channel Rewards)
+========================================= */
+// همه‌ی کارت‌های پاداش کانالی از فایل جداگانه‌ی reward-channels.js خوانده
+// می‌شود (نه اینجا)؛ برای اضافه/ویرایش یک کانال پاداش به آن فایل برو.
+// fallback زیر فقط برای وقتی است که آن فایل به هر دلیلی لود نشده باشد.
+const REWARD_CONFIG = (typeof window !== 'undefined' && window.REWARD_SETTINGS)
+    ? window.REWARD_SETTINGS
+    : { channels: [], rotatingSlot: null };
+
+const REWARD_DAYS_FA = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+const DAILY_REWARD_MIN = 10;
+const DAILY_REWARD_MAX = 85;
+
+// همون فرمت YYYY-MM-DD که getTodayKey هم استفاده می‌کند (بر مبنای ساعت محلی دستگاه)
+function getDateKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// شروع هفته‌ی جاری (شنبه) برای تاریخ داده‌شده. getDay() در جاوااسکریپت
+// یکشنبه=۰ ... شنبه=۶ برمی‌گرداند؛ فرمول زیر فاصله‌ی «امروز» تا آخرین شنبه را می‌دهد.
+function getWeekStartDate(d) {
+    const daysSinceSaturday = (d.getDay() + 1) % 7;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - daysSinceSaturday);
+}
+
+// ⚠️ محدودیت واقعی (مثل بقیه‌ی این پروژه‌ی کاملاً استاتیک، نگاه کن به
+// توضیح گیت عضویت اجباری بالاتر همین فایل): تشخیص «امروز چه روزیه» فقط از
+// روی ساعت خود گوشی ممکن است، نه یک ساعت سرور واقعی (چون این سایت اصلاً
+// بک‌اند ندارد). اگر امنیت ۱۰۰٪ در برابر دستکاری ساعت لازم باشد، این بخش
+// باید به یک سرویس بک‌اند واقعی (که ساعت را خودش تعیین کند، نه کلاینت) وصل
+// شود. تا آن زمان، محافظ زیر ساده‌ترین و رایج‌ترین روش تقلب — عقب بردن
+// ساعت گوشی برای گرفتن دوباره‌ی جایزه‌ی همون روز/هفته — را می‌گیرد:
+// «هفته‌ی ثبت‌شده» در GameState هرگز به عقب برنمی‌گردد، فقط می‌تواند جلوتر
+// برود. یعنی اگر GameState.rewards.daily.weekStartKey از هفته‌ی محاسبه‌شده‌ی
+// فعلی جلوتر یا برابر باشد، هیچ چیزی ریست نمی‌شود و روزهای قبلاً گرفته‌شده
+// (claimedDaysThisWeek) دست‌نخورده می‌مانند.
+function syncDailyRewardWeek() {
+    const now = new Date();
+    const todayKey = getDateKey(now);
+    const weekStartKey = getDateKey(getWeekStartDate(now));
+    const daily = GameState.rewards.daily;
+
+    if (!daily.weekStartKey || weekStartKey > daily.weekStartKey) {
+        daily.weekStartKey = weekStartKey;
+        daily.claimedDaysThisWeek = [];
+        StorageManager.save();
+    }
+    return { now, todayKey, weekStartKey, isCurrentWeek: weekStartKey === daily.weekStartKey };
+}
+
+function canClaimDailyRewardToday() {
+    const { todayKey, isCurrentWeek } = syncDailyRewardWeek();
+    const daily = GameState.rewards.daily;
+    // اگر ساعت دستگاه از هفته‌ی ثبت‌شده عقب‌تر باشد (یعنی کسی ساعت را عقب
+    // برده)، هفته‌ی ثبت‌شده معتبر باقی می‌ماند و چیزی قابل دریافت نیست.
+    if (!isCurrentWeek) return false;
+    if (daily.claimedDaysThisWeek.includes(todayKey)) return false;
+    if (daily.lastGrantedDateKey && todayKey <= daily.lastGrantedDateKey) return false;
+    return true;
+}
+
+function claimDailyReward() {
+    if (!canClaimDailyRewardToday()) { showToast('⏳', 'امتیاز روزانه‌ی امروز رو قبلاً گرفتی.'); return; }
+    AudioEngine.tap();
+    const { todayKey } = syncDailyRewardWeek();
+    const amount = Math.floor(Math.random() * (DAILY_REWARD_MAX - DAILY_REWARD_MIN + 1)) + DAILY_REWARD_MIN;
+    GameState.globalScore += amount;
+    GameState.totalEarned += amount;
+    GameState.rewards.daily.claimedDaysThisWeek.push(todayKey);
+    GameState.rewards.daily.lastGrantedDateKey = todayKey;
+    checkMedals();
+    StorageManager.save();
+    AudioEngine.success();
+    renderHome();
+    renderDailyRewardSection();
+    showToast('🎁', `${amount} سکه امتیاز روزانه‌ت رو گرفتی! مبارکه 🎊`);
+}
+
+function renderDailyRewardSection() {
+    const { todayKey, weekStartKey } = syncDailyRewardWeek();
+    const daily = GameState.rewards.daily;
+
+    const pipsContainer = document.getElementById('daily-reward-pips');
+    if (pipsContainer) {
+        pipsContainer.innerHTML = '';
+        const [wy, wm, wd] = weekStartKey.split('-').map(Number);
+        for (let i = 0; i < 7; i++) {
+            const dayKey = getDateKey(new Date(wy, wm - 1, wd + i));
+            const claimed = daily.claimedDaysThisWeek.includes(dayKey);
+            const isToday = dayKey === todayKey;
+            const pip = document.createElement('div');
+            pip.className = `daily-pip ${claimed ? 'claimed' : ''} ${isToday ? 'today' : ''}`;
+            pip.innerHTML = `<div class="daily-pip-dot">${claimed ? '✓' : i + 1}</div><span class="daily-pip-label">${REWARD_DAYS_FA[i]}</span>`;
+            pipsContainer.appendChild(pip);
+        }
+    }
+
+    const canClaim = canClaimDailyRewardToday();
+    const btn = document.getElementById('btn-claim-daily-reward');
+    if (btn) {
+        btn.disabled = !canClaim;
+        btn.textContent = canClaim ? '🎁 دریافت امتیاز امروز' : '✅ امروز رو گرفتی، فردا دوباره بیا';
+    }
+}
+
+// --- پاداش عضویت در کانال‌ها ---
+// دقیقاً مثل گیت عضویت اجباری بالاتر همین فایل: از فرانت (بدون سرور و بدون
+// Bot API رسمی ایتا) امکان بررسی واقعی و قطعی عضویت وجود ندارد. اگر بعداً
+// یک بک‌اند/بات با دسترسی ادمین به این کانال‌ها راه‌اندازی شد، دقیقاً همینجا
+// (تابع claimRewardChannel، قبل از دادن پاداش) باید یک فراخوانی به API واقعی
+// عضویت (مثلاً getChatMember) اضافه شود. تا آن زمان، از self-report صادقانه
+// استفاده می‌شود: فقط بعد از اینکه کاربر واقعاً به کانال فرستاده شده و به
+// رازک برگشته (نه بلافاصله بعد از کلیک روی «عضویت»)، دکمه به «دریافت» تغییر
+// می‌کند؛ خود گرفتن پاداش با کلیک جدا و آگاهانه روی «دریافت» انجام می‌شود.
+const rewardChannelsReturned = new Set(); // فقط برای همین نشست؛ دائمی ذخیره نمی‌شود
+let pendingRewardCardKey = null;
+
+// کلید ذخیره‌سازی: برای کارت‌های ثابت همان id، برای جایگاه چرخشی «چهارم»
+// ترکیب id+slotVersion — همین باعث می‌شود با عوض شدن تبلیغ‌کننده (slotVersion
+// جدید در reward-channels.js) کاربر دوباره واجد شرایط پاداش شود.
+function getRewardCardKey(card) {
+    return card.slotVersion ? `${card.id}:${card.slotVersion}` : card.id;
+}
+
+function getAllRewardCards() {
+    const fixedCards = (REWARD_CONFIG.channels || []).filter(c => c.active !== false);
+    const cards = [...fixedCards];
+    if (REWARD_CONFIG.rotatingSlot && REWARD_CONFIG.rotatingSlot.active !== false) {
+        cards.push(REWARD_CONFIG.rotatingSlot);
+    }
+    return cards;
+}
+
+function isRewardChannelClaimed(card) {
+    return !!GameState.rewards.channels[getRewardCardKey(card)];
+}
+
+function renderRewardChannelsSection() {
+    const container = document.getElementById('reward-channels-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    getAllRewardCards().forEach(card => {
+        const key = getRewardCardKey(card);
+        const claimed = isRewardChannelClaimed(card);
+        const returned = rewardChannelsReturned.has(key);
+
+        const row = document.createElement('div');
+        row.className = 'reward-channel-card';
+        row.innerHTML = `
+            <div class="reward-channel-icon">${card.icon || '📌'}</div>
+            <div class="reward-channel-info">
+                <h4 class="reward-channel-name"><b>${card.name}</b></h4>
+                <span class="reward-channel-coins">🪙 ${card.reward} سکه</span>
+            </div>`;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ios-btn reward-channel-btn';
+        if (claimed) {
+            btn.textContent = '✅ دریافت شد';
+            btn.classList.add('reward-btn-claimed');
+            btn.disabled = true;
+        } else if (returned) {
+            btn.textContent = 'دریافت';
+            btn.classList.add('reward-btn-claim');
+            btn.addEventListener('click', () => claimRewardChannel(card));
+        } else {
+            btn.textContent = 'عضویت';
+            btn.classList.add('reward-btn-join');
+            btn.addEventListener('click', () => openRewardChannelInfo(card));
+        }
+        row.appendChild(btn);
+        container.appendChild(row);
+    });
+}
+
+// قدم اول: پیام اطلاع‌رسانی («حتماً عضو کانال شوید...») قبل از باز شدن کانال.
+function openRewardChannelInfo(card) {
+    AudioEngine.tap();
+    pendingRewardCardKey = getRewardCardKey(card);
+    const enterBtn = document.getElementById('btn-reward-enter-channel');
+    enterBtn.onclick = () => {
+        AudioEngine.tap();
+        openExternalLink(`https://eitaa.com/${card.username}`);
+    };
+    document.getElementById('modal-reward-join-info').classList.remove('hidden');
+}
+
+// وقتی کاربر از کانال به رازک برمی‌گردد (تب/اپ دوباره «دیده» می‌شود)، اگر
+// یک کارت پاداش در انتظار بود، self-report ثبت می‌شود و دکمه‌اش زرد→سبز
+// تغییر می‌کند. توضیح کامل محدودیت این روش بالای همین بخش آمده است.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && pendingRewardCardKey) {
+        rewardChannelsReturned.add(pendingRewardCardKey);
+        pendingRewardCardKey = null;
+        document.getElementById('modal-reward-join-info').classList.add('hidden');
+        renderRewardChannelsSection();
+    }
+});
+
+function claimRewardChannel(card) {
+    const key = getRewardCardKey(card);
+    if (isRewardChannelClaimed(card)) return; // ضدتقلب: هر کلید فقط یک‌بار قابل دریافت است
+    AudioEngine.success();
+    GameState.globalScore += card.reward;
+    GameState.totalEarned += card.reward;
+    GameState.rewards.channels[key] = true;
+    rewardChannelsReturned.delete(key);
+    checkMedals();
+    StorageManager.save();
+    renderHome();
+    renderRewardChannelsSection();
+    showToast('🎊', `با عضویت در کانال ${card.name}، ${card.reward} سکه به شما داده شد. مبارکه 🎊`);
+}
+
+function renderRewardsModal() {
+    renderDailyRewardSection();
+    renderRewardChannelsSection();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
