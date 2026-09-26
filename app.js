@@ -150,8 +150,17 @@ const CATEGORY_SCORES = {
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const CHANGELOG_DB = [
+    {
+        version: '1.10.0',
+        added: [
+            'بخش جدید «🎁 جایزه» به تنظیمات اضافه شد',
+            'امکان دریافت امتیاز روزانه رایگان',
+            'امکان دریافت سکه با عضویت در کانال‌ها',
+            'ظاهر و تجربه کاربری بخش جایزه بهتر شد'
+        ]
+    },
     {
         version: '1.9.0',
         added: [
@@ -1889,9 +1898,8 @@ function renderRewardChannelsSection() {
         const row = document.createElement('div');
         row.className = 'reward-channel-card';
         row.innerHTML = `
-            <div class="reward-channel-icon">${card.icon || '📌'}</div>
             <div class="reward-channel-info">
-                <h4 class="reward-channel-name"><b>${card.name}</b></h4>
+                <h4 class="reward-channel-name">${card.name}</h4>
                 <span class="reward-channel-coins">🪙 ${card.reward} سکه</span>
             </div>`;
 
@@ -1920,6 +1928,10 @@ function renderRewardChannelsSection() {
 function openRewardChannelInfo(card) {
     AudioEngine.tap();
     pendingRewardCardKey = getRewardCardKey(card);
+    const textEl = document.getElementById('reward-join-info-text');
+    if (textEl) {
+        textEl.textContent = `برای دریافت سکه، لطفاً داخل کانال ${card.name} عضو شوید و پست‌ها را با دقت و به‌آرامی سین کنید تا سکه‌های شما فعال شوند.`;
+    }
     const enterBtn = document.getElementById('btn-reward-enter-channel');
     enterBtn.onclick = () => {
         AudioEngine.tap();
