@@ -324,6 +324,17 @@
                     <span class="setting-version" id="settings-version-label">نسخه ۱.۰.۰</span>
                 </div>
             </div>
+
+            <div class="settings-group-title">پاداش</div>
+            <div class="ios-list">
+                <div class="ios-list-item clickable" id="btn-open-rewards">
+                    <div class="setting-label">
+                        <span class="setting-icon-square icon-rewards">🎁</span>
+                        <span>امتیاز و پاداش</span>
+                    </div>
+                    <span class="setting-version">‹</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -337,6 +348,40 @@
                 <button class="close-btn" data-close="modal-changelog">×</button>
             </div>
             <div class="changelog-body" id="changelog-body"></div>
+        </div>
+    </div>
+
+    <div id="modal-rewards" class="modal-overlay hidden">
+        <div class="ios-modal slide-up rewards-modal">
+            <div class="modal-header">
+                <h2>🎁 امتیاز و پاداش</h2>
+                <button class="close-btn" data-close="modal-rewards">×</button>
+            </div>
+            <div class="rewards-body">
+                <div class="daily-reward-card">
+                    <div class="daily-reward-title">🎁 امتیاز روزانه</div>
+                    <div class="daily-reward-sub">هر روز (شنبه تا جمعه) یک‌بار، بین ۱۰ تا ۸۵ سکه رایگان بگیر</div>
+                    <div class="daily-reward-pips" id="daily-reward-pips"></div>
+                    <button type="button" id="btn-claim-daily-reward" class="ios-btn daily-reward-btn">🎁 دریافت امتیاز امروز</button>
+                </div>
+
+                <div class="reward-channels-title">عضویت در کانال‌ها</div>
+                <div class="reward-channels-list" id="reward-channels-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- پیام اطلاع‌رسانی قبل از باز شدن کانال پاداش (برای هر کارت پاداش
+         مشترک است؛ محتوایش ثابت است و نیازی به data-channel-id ندارد) -->
+    <div id="modal-reward-join-info" class="modal-overlay hidden">
+        <div class="ios-modal pop-in reward-join-info-modal">
+            <div class="modal-icon join-gate-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="white" stroke="none"/></svg>
+            </div>
+            <h2>قبل از عضویت</h2>
+            <p>حتماً عضو کانال شوید و پست‌ها را دونه‌به‌دونه سین کنید تا امتیاز خود را دریافت کنید.</p>
+            <button type="button" id="btn-reward-enter-channel" class="ios-btn primary-btn w-100">ورود به کانال</button>
+            <button type="button" class="ios-btn ghost-btn w-100 close-btn" data-close="modal-reward-join-info">بعداً</button>
         </div>
     </div>
 
@@ -358,6 +403,7 @@
     </script>
     <script src="index.js"></script>
     <script src="channel-photos.js"></script>
+    <script src="reward-channels.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
