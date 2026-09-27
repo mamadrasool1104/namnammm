@@ -461,26 +461,16 @@ input:checked + .slider:before { transform: translateX(20px); }
 .channel-promo-info { flex: 1; min-width: 0; }
 .channel-promo-title {
     color: #ffffff;
-    font-size: 1rem;
+    font-size: 1.25rem; /* ۲۵٪ بزرگ‌تر از قبل (1rem) */
     font-weight: 700;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.channel-promo-handle {
-    display: inline-block;
-    color: rgba(255, 255, 255, 0.95);
-    font-size: 0.76rem;
-    font-weight: 600;
-    direction: ltr;
-    margin-bottom: 4px;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-}
 .channel-promo-desc {
     color: rgba(255, 255, 255, 0.85);
-    font-size: 0.76rem;
+    font-size: 0.82rem; /* حدود ۸٪ بزرگ‌تر از قبل (0.76rem) */
     line-height: 1.4;
 }
 .channel-promo-arrow {
@@ -606,14 +596,10 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 /* --- بازطراحی صفحه تنظیمات --- */
 .settings-modal { text-align: right; }
-.settings-group-title {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    margin: 18px 6px 8px;
-    text-transform: none;
-}
-.settings-group-title:first-of-type { margin-top: 4px; }
+/* فاصله‌ی بین کادرهای تنظیمات (بعد از حذف عنوان‌های گروه) — نزدیک‌تر از
+   قبل ولی نه چسبیده به هم */
+.settings-modal .ios-list { margin-bottom: 14px; }
+.settings-modal .ios-list:last-of-type { margin-bottom: 0; }
 .setting-label { display: flex; align-items: center; gap: 14px; }
 .setting-icon-square {
     width: 52px; height: 52px;
