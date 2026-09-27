@@ -1048,7 +1048,6 @@ function renderChannelPromos() {
                 <div class="channel-promo-icon"></div>
                 <div class="channel-promo-info">
                     <h3 class="channel-promo-title">${promo.name}</h3>
-                    <span class="channel-promo-handle">${promo.handle || ''}</span>
                     <p class="channel-promo-desc">${promo.desc}</p>
                 </div>
                 <div class="ad-cta-btn">${promo.buttonText || 'مشاهده'}</div>`;
@@ -1058,7 +1057,6 @@ function renderChannelPromos() {
                 <div class="channel-promo-icon"></div>
                 <div class="channel-promo-info">
                     <h3 class="channel-promo-title">${promo.name}</h3>
-                    <span class="channel-promo-handle">${promo.handle}</span>
                     <p class="channel-promo-desc">${promo.desc}</p>
                 </div>
                 <div class="channel-promo-arrow">‹</div>`;
