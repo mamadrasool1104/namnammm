@@ -1,413 +1,2011 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>بازی ایموجی‌ها</title>
+/**
+ * iOS-Style Emoji Guessing Game
+ * Engine: Pure Vanilla JS (ES6+)
+ */
 
-    <!-- اتصال زودهنگام به CDN تصاویر ایموجی، تا وقتی مرحله باز می‌شود عکس‌ها سریع‌تر بیایند -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+// ==========================================
+// ⚠️ تنظیمات دیتابیس خارجی (حل مشکل سینک)
+// آیدی باکت خود از kvdb.io را در اینجا قرار دهید
+const KVDB_BUCKET_ID = "YOUR_BUCKET_ID_HERE"; 
+// ==========================================
 
-    <!-- فونت آراد از قبل روی خود سایت است (بدون وابستگی به سرور خارجی)، همین الان لود شروع شود -->
-    <link rel="preload" href="fonts/AradVF.ttf" as="font" type="font/ttf" crossorigin>
+// --- تشخیص مقاوم شناسه‌ی کاربر ایتا ---
+// دلیل وجود این تابع: قبلاً کد مستقیماً از initDataUnsafe.user.id استفاده
+// می‌کرد. اگر SDK ایتا در نسخه/پلتفرم خاصی این فیلد را با نام دیگری برگرداند
+// یا موقتاً خالی باشد، id می‌شد undefined، کلید ذخیره‌سازی عوض می‌شد، و کاربر
+// «امتیازش صفر شده» می‌دید (چون دیگر به رکورد قبلی‌اش وصل نمی‌شد). این تابع
+// چند نام محتمل را امتحان می‌کند و همیشه یک رشته یا null برمی‌گرداند، هرگز
+// undefined/NaN که به رشته‌ی کلید نشت کند.
+function resolveEitaaUserId(rawUser) {
+    if (!rawUser || typeof rawUser !== 'object') return null;
+    const candidate = rawUser.id ?? rawUser.user_id ?? rawUser.userId ?? rawUser.chat_id ?? null;
+    if (candidate === null || candidate === undefined || candidate === '') return null;
+    return String(candidate);
+}
 
-    <link rel="preload" href="data.json" as="fetch" crossorigin>
-    <link rel="stylesheet" href="style.css">
+const PERSIAN_ALPHABET = "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی";
+const HINT_COST = 15;
+// این دو تا هنوز برای کارت‌های «کانال‌های ما» در پایین صفحه استفاده می‌شوند.
+const TECH_NOUR_LINK = 'https://eitaa.com/Tech_nour';
+const AVAY_KHIYAL_LINK = 'https://eitaa.com/avay_khiyal';
 
-    <!-- Eitaa SDK: با defer لود می‌شود تا جلوی نمایش سریع صفحه را نگیرد -->
-    <script src="https://developer.eitaa.com/eitaa-web-app.js" defer></script>
-</head>
-<body>
-    <!-- Screen 1: Home / Categories -->
-    <div id="screen-home" class="screen active">
-        <header class="ios-header">
-            <div class="user-info" id="user-info-trigger">
-                <div class="avatar" id="user-avatar">👤</div>
-                <div class="user-text">
-                    <span class="greeting">سلام،</span>
-                    <strong id="user-name">کاربر عزیز</strong>
-                </div>
-            </div>
-            <div class="header-actions">
-                <div class="score-pill">🪙 <span id="home-total-score">0</span></div>
-                <button id="btn-open-settings" class="icon-btn ios-btn" aria-label="تنظیمات">⚙️</button>
-            </div>
-        </header>
+/* =========================================
+   عضویت اجباری چرخشی هفتگی (Weekly Mandatory Channel Rotation)
+========================================= */
+// ⚠️ محدودیت واقعی و مهم: این سایت کاملاً استاتیک است و هیچ ارتباطی با
+// API عضویت واقعی ایتا ندارد (چنین APIای برای این پروژه در دسترس نیست، و
+// حتی اگر بود، نیاز داشت ربات ما توی هرکدوم از این کانال‌ها ادمین/عضو باشه
+// که نیستیم). پس این سیستم، دقیقاً مثل قبل، از روش «خوداظهاری» استفاده
+// می‌کند: کاربر روی «عضویت» کلیک می‌کند، کانال باز می‌شود، و با زدن «بررسی
+// عضویت» فقط تأیید می‌کند که عضو شده — نه اینکه واقعاً از سمت سرور چک شود.
+// اگر تیک «عضویت شما تأیید شد» را نشان دهیم انگار واقعاً چک شده، این
+// گمراه‌کننده است؛ به همین دلیل صادقانه همان الگوی قبلی حفظ شده.
+//
+// چیزی که این بخش واقعاً و به‌طور کامل پیاده می‌کند: چرخش هفتگیِ قطعی و
+// بی‌نهایتِ «کدام کانال این هفته الزامی است» — این بخش صد‌درصد واقعی و
+// قابل تست است چون فقط ریاضیِ تاریخ است، نیازی به بک‌اند ندارد.
 
-        <main class="home-scroll">
-            <section class="daily-challenge-section">
-                <div class="daily-challenge-card" id="daily-challenge-card">
-                    <div class="daily-challenge-icon">🔥</div>
-                    <div class="daily-challenge-info">
-                        <div class="daily-challenge-top">
-                            <h3>سوال روزانه</h3>
-                            <span class="daily-badge" id="daily-badge">🔥 جدید</span>
-                        </div>
-                        <p id="daily-status-text">یه معمای ایموجی مخصوص امروز، هر روز عوض می‌شه</p>
-                    </div>
-                    <div class="daily-challenge-arrow">‹</div>
-                </div>
-            </section>
+// همه‌ی تنظیمات چرخش، از فایل‌های جداگانه‌ی هر کانال خوانده می‌شود — نه
+// اینجا. برای تغییر دادن کانال‌ها، ترتیب، فعال/غیرفعال کردن، یا تاریخ
+// شروع، به پوشه‌ی config/mandatory-channels/ برو (هر کانال یک فایل جدا،
+// + یک index.js که ترتیب چرخش را مشخص می‌کند). این فایل‌ها باید در
+// index.html قبل از app.js لود شوند.
+//
+// fallback زیر («اگر آن فایل‌ها به هر دلیلی لود نشده بودند») عمداً همان
+// چهار کانال پیش‌فرض را دارد تا اگر یک نفر پوشه‌ی config/ را حذف کرد، بازی
+// کاملاً نشکند.
+const ROTATION_CONFIG = (typeof window !== 'undefined' && window.MANDATORY_CHANNELS_ROTATION)
+    ? {
+        startDate: window.MANDATORY_CHANNELS_ROTATION.startDate,
+        weeksPerChannel: window.MANDATORY_CHANNELS_ROTATION.weeksPerChannel,
+        channels: window.MANDATORY_CHANNELS_ROTATION.order.filter(Boolean)
+      }
+    : {
+        startDate: '2025-01-06T00:00:00+03:30',
+        weeksPerChannel: 1,
+        channels: [
+            { id: 'avay_khiyal', type: 'channel', name: 'آوای‌خیال', icon: '🕊️', username: 'avay_khiyal', enabled: true },
+            { id: 'tech_nour', type: 'channel', name: 'تِک‌نور', icon: '📢', username: 'Tech_nour', enabled: true },
+            { id: 'rasa_meme', type: 'channel', name: 'رسامیم', icon: '😂', username: 'Rasa_Meme', enabled: true },
+            { id: 'partner', type: 'partner', name: 'کانال همکار', icon: '🤝', username: 'PARTNER_USERNAME_HERE', enabled: true }
+        ]
+      };
+// این خط چیزی را عوض نمی‌کند؛ فقط برای دیباگ از کنسول مرورگر در دسترس
+// می‌گذارد (چون const در سطح بالای فایل، به‌طور پیش‌فرض روی window در
+// دسترس نیست).
+window.ROTATION_CONFIG = ROTATION_CONFIG;
 
-            <section class="medals-section">
-                <div class="section-header">
-                    <h2><span class="header-icon-emoji">🏆</span> افتخارات شما</h2>
-                    <span class="badge" id="medals-count">0/0</span>
-                </div>
-                <div class="medals-scroll" id="medals-container"></div>
-            </section>
+function getChannelUrl(channel) {
+    return `https://eitaa.com/${channel.username}`;
+}
 
-            <section class="categories-section">
-                <div class="section-header">
-                    <h2><span class="header-icon-emoji">🗂️</span> دسته‌بندی‌ها</h2>
-                </div>
-                <div class="categories-list" id="categories-container"></div>
-            </section>
+// موتور اصلی چرخش. «now» عمداً قابل تزریق است (پیش‌فرض: همین لحظه) تا
+// بشود بدون وابستگی به ساعت واقعی سیستم، تستش کرد.
+// چون بر مبنای فاصله‌ی زمانی مطلق (میلی‌ثانیه) بین دو لحظه محاسبه می‌شود
+// (نه روز تقویمی محلی)، این محاسبه کاملاً مستقل از منطقه‌زمانی مرورگر
+// کاربر است؛ همه‌ی کاربران در سراسر دنیا در یک لحظه‌ی مشخص، دقیقاً همان
+// نتیجه را می‌گیرند — دقیقاً همان چیزی که «برای همه یکسان باشد» نیاز دارد.
+function getCurrentRotationInfo(now = new Date()) {
+    const enabledChannels = ROTATION_CONFIG.channels.filter(c => c.enabled);
+    if (enabledChannels.length === 0) return null; // اگر همه غیرفعال بودند، گیت را کلاً غیرفعال کن
 
-            <section class="suggestions-section" id="suggestions-section">
-                <div class="section-header">
-                    <h2 id="suggestions-title">پیشنهادات شما 🫂</h2>
-                </div>
-                <div class="suggestions-card">
-                    <p class="suggestions-intro" id="suggestions-intro"></p>
-                    <pre class="suggestions-template" id="suggestions-template"></pre>
-                    <div class="suggestions-actions">
-                        <button type="button" id="btn-copy-suggestion-template" class="ios-btn ghost-btn">📋 کپی متن</button>
-                        <button type="button" id="btn-send-suggestion" class="ios-btn primary-btn">ارسال پیشنهاد</button>
-                    </div>
-                </div>
-            </section>
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const startMs = new Date(ROTATION_CONFIG.startDate).getTime();
+    const nowMs = now.getTime();
 
-            <section class="channel-promo-section">
-                <div class="section-header">
-                    <h2>
-                        <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ios-blue)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="var(--ios-blue)" stroke="none"/></svg>
-                        کانال‌های ما
-                    </h2>
-                </div>
-                <div class="channel-promo-scroll" id="channel-promo-container"></div>
-                <div class="channel-promo-dots" id="channel-promo-dots"></div>
-            </section>
+    // اگر (به‌هر دلیلی، مثلاً ساعت اشتباه دستگاه) now قبل از startDate باشد،
+    // در هفته‌ی صفر می‌مانیم، نه یک عدد منفی عجیب.
+    const weekNumber = Math.max(0, Math.floor((nowMs - startMs) / msPerWeek));
 
-        </main>
-    </div>
+    const cycleLength = ROTATION_CONFIG.weeksPerChannel * enabledChannels.length;
+    const positionInCycle = weekNumber % cycleLength;
+    const rotationIndex = Math.floor(positionInCycle / ROTATION_CONFIG.weeksPerChannel);
 
-    <!-- Screen 2: Game -->
-    <div id="screen-game" class="screen">
-        <header class="ios-header glass-nav">
-            <!-- دکمه بازگشت نرم‌افزاری -->
-            <button id="btn-back-home" class="square-back-btn" aria-label="بازگشت">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M15 18l-6-6 6-6"/>
-                </svg>
-            </button>
-            
-            <div class="nav-title" id="game-category-title">مرحله</div>
-            <div class="score-pill">🪙 <span id="game-score">0</span></div>
-        </header>
+    const channel = enabledChannels[rotationIndex];
+    const cycleStartWeek = weekNumber - (weekNumber % ROTATION_CONFIG.weeksPerChannel);
+    const startsAt = new Date(startMs + cycleStartWeek * msPerWeek);
+    const endsAt = new Date(startMs + (cycleStartWeek + ROTATION_CONFIG.weeksPerChannel) * msPerWeek);
 
-        <main class="game-container">
-            <!-- هشدار عامیانه بودن ضرب‌المثل‌ها -->
-            <div id="category-notice" class="category-notice hidden"></div>
-            <div id="daily-type-badge" class="daily-type-badge hidden"></div>
+    return { channel, rotationIndex, weekNumber, startsAt, endsAt };
+}
 
-            <div class="level-indicator">مرحله <span id="ui-level">1</span><span id="ui-difficulty" class="difficulty-badge"></span></div>
-            
-            <section class="emoji-area ios-card" id="emoji-display">
-                <div class="emoji-inner" id="emoji-inner-container">
-                    <!-- Apple Emojis به اینجا اضافه می‌شوند -->
-                </div>
-            </section>
+function getCurrentMandatoryChannel(now) {
+    const info = getCurrentRotationInfo(now);
+    return info ? info.channel : null;
+}
 
-            <!-- بخش دکمه‌ها و تبلیغات -->
-            <section class="actions-area">
-                <button id="btn-hint" class="ios-btn primary-btn w-100">
-                    💡 راهنما (۱۵- امتیاز)
-                </button>
-                <!-- جایگاه تبلیغات -->
-                <div id="adly-container"></div>
-            </section>
+function getNextRotationChange(now) {
+    const info = getCurrentRotationInfo(now);
+    return info ? info.endsAt : null;
+}
 
-            <section class="answer-area" id="answer-slots"></section>
+// کمک برای دیباگ از کنسول مرورگر (چون سرور/لاگ سرور برای این پروژه وجود
+// ندارد، این معادل صادقانه‌اش سمت کلاینت است). توی کنسول بنویس: debugRotation()
+window.debugRotation = function (customDate) {
+    const info = getCurrentRotationInfo(customDate ? new Date(customDate) : undefined);
+    if (!info) { console.log('[MandatoryJoin] هیچ کانال فعالی نیست (همه غیرفعال‌اند).'); return; }
+    console.log('[MandatoryJoin] Week number:', info.weekNumber);
+    console.log('[MandatoryJoin] Rotation index:', info.rotationIndex);
+    console.log('[MandatoryJoin] Active channel:', info.channel.name, `(@${info.channel.username})`, info.channel.type === 'partner' ? '[کانال همکار]' : '');
+    console.log('[MandatoryJoin] This period:', info.startsAt.toISOString(), '→', info.endsAt.toISOString());
+    console.log('[MandatoryJoin] User confirmed this week already:',
+        GameState.joinGate.confirmedChannelId === info.channel.id && GameState.joinGate.confirmedWeekNumber === info.weekNumber);
+    return info;
+};
 
-            <section class="keyboard-area ios-card" id="keyboard"></section>
-        </main>
-    </div>
+const BASE_SCORE = 10;
+const DAILY_BASE_SCORE = 50;
+// فاصله‌ی چرخش خودکار کارت‌های «کانال‌های ما»
+const PROMO_ROTATE_INTERVAL_MS = 5000;
 
-    <!-- Screen 3: Profile -->
-    <div id="screen-profile" class="screen">
-        <header class="ios-header glass-nav">
-            <button id="btn-back-profile" class="square-back-btn" aria-label="بازگشت">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M15 18l-6-6 6-6"/>
-                </svg>
-            </button>
-            <div class="nav-title">پروفایل من</div>
-            <div style="width:36px"></div>
-        </header>
+// امتیاز پایه‌ی هر دسته؛ اگر دسته‌ای اینجا نبود از BASE_SCORE استفاده می‌شود.
+// (درخواست: امتیاز ضرب‌المثل‌ها حداقل ۲۵ باشد)
+const CATEGORY_SCORES = {
+    proverbs: 25,
+    movies: 10,
+    countries: 10
+};
 
-        <main class="profile-container">
-            <div class="profile-avatar-wrap">
-                <div class="profile-avatar" id="profile-avatar">👤</div>
-                <h2 id="profile-name">کاربر عزیز</h2>
-            </div>
+// نسخه فعلی برنامه + لیست تغییرات هر نسخه. هر وقت آپدیت جدیدی منتشر کردی،
+// یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
+// خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
+// نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
+const APP_VERSION = '1.10.0';
+const CHANGELOG_DB = [
+    {
+        version: '1.10.0',
+        added: [
+            'بخش جدید «🎁 جایزه» به تنظیمات اضافه شد',
+            'امکان دریافت امتیاز روزانه رایگان',
+            'امکان دریافت سکه با عضویت در کانال‌ها',
+            'ظاهر و تجربه کاربری بخش جایزه بهتر شد'
+        ]
+    },
+    {
+        version: '1.9.0',
+        added: [
+            'الان می‌تونی از بین چند عکس آماده، عکس پروفایلت رو انتخاب کنی 🖼️',
+            'امکان تغییر نام نمایشی‌ت داخل بازی، از صفحه پروفایل',
+            'بخش تازه‌ی «پیشنهادات شما 🫂» برای فرستادن ایده و انتقاد',
+            'دسته‌بندی جدید «اصطلاحات» با 20 معمای تازه اضافه شد',
+        ]
+    },
+    {
+        version: '1.8.0',
+        added: [
+            'کارت‌های «کانال‌های ما» حالا عکس پروفایل واقعی هر کانال را نشان می‌دهند',
+            'کارت تبلیغ هم عکس پروفایل تبلیغ‌کننده را نمایش می‌دهد',
+            'باگ ها و عیوب گزارش شده برطرف شد',
+            '.از این به بعد بازی روان تر اجرا می‌شود'
+        ]
+    },
+    {
+        version: '1.7.0',
+        added: [
+            'آیکون‌های جدید و شیک‌تر برای پروفایل (پسر/دختر) به‌جای ایموجی',
+            'جای آماده برای انتخاب عکس پروفایل (به‌زودی فعال می‌شود)',
+            'کارت‌های «کانال‌های ما» حالا آیکون‌های طراحی‌شده دارن، بزرگ‌تر و خواناتر از قبل',
+            'سوال روزانه: بانک سوال‌ها بزرگ‌تر شد و دیگه سوال‌های تکراری پرسیده نمیشود'
+        ]
+    },
+    {
+        version: '1.6.0',
+        added: [
+            'روی سوال روزانه حالا مشخص می‌شود از کدوم دسته‌بندی است (مثلاً ضرب‌المثل، فیلم یا کشور)',
+            'آیکون‌های اصلی برنامه بزرگ‌تر و خواناتر شدند'
+        ],
+        fixed: [
+            'باز نشدن صفحه تنظیمات و صفحه پروفایل برطرف شد',
+            'پیام «امتیاز کافی نیست» حالا به‌شکل یک نوتیفیکیشن ظریف نمایش داده می‌شود، نه یک پاپ‌آپ مرورگر',
+            'نمای صفحه اصلی روی صفحه‌های بزرگ (دسکتاپ/تبلت) هم‌مرکز و منظم شد'
+        ]
+    },
+    {
+        version: '1.5.0',
+        added: [
+            'امتیاز سوال روزانه به ۵۰ امتیاز افزایش پیدا کرد',
+            'ایموجی نمایش امتیاز جذاب‌تر شد',
+            'آیکون‌های تازه و شیک‌تر جای ایموجی‌های قدیمی صفحه تنظیمات نشستن'
+        ]
+    },
+    {
+        version: '1.4.0',
+        added: [
+            'سوال روزانه: هر روز یک معمای تازه که درست بعد از نیمه‌شب عوض می‌شود',
+            'قاب مخصوص تبلیغات ویژه با رنگ‌بندی جداگانه',
+            'نمای کشویی کانال‌ها الان خودش هر ۵ ثانیه می‌چرخد',
+            'نمایش سطح سختی (آسان / متوسط / سخت) کنار شماره هر مرحله',
+            'صفحه تنظیمات بازطراحی شد'
+        ],
+        fixed: [
+            'امتیاز دسته ضرب‌المثل‌ها به حداقل ۲۵ افزایش پیدا کرد',
+            'مدال «ثروتمند» حالا بر اساس کل امتیازی که تا الان کسب کرده‌ای حساب می‌شود، نه موجودی فعلی',
+            'مشکل نمایش و آنلاک‌شدن اشتباه مدال‌ها برطرف شد'
+        ]
+    },
+    {
+        version: '1.3.0',
+        added: [
+            'نمای کشویی معرفی کانال‌ها به صفحه اصلی اضافه شد'
+        ],
+        fixed: [
+            'کلیک روی لینک کانال حالا داخل خود اپ ایتا باز می‌شود'
+        ]
+    }
+];
 
-            <div class="profile-section-title">نام شما</div>
-            <div class="name-display-row">
-                <span id="profile-current-name" class="name-display-text">کاربر عزیز</span>
-                <button type="button" id="btn-edit-name" class="ios-btn ghost-btn name-edit-btn">تغییر نام</button>
-            </div>
+let DB = { categories: [] };
 
-            <div class="profile-section-title">جنسیت</div>
-            <div class="gender-picker">
-                <div class="gender-option" data-gender="boy">
-                    <div class="gender-icon">
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                            <path d="M14 94 L24 64 L76 64 L86 94 Z" fill="var(--ios-blue)"/>
-                            <circle cx="50" cy="36" r="19" fill="var(--ios-blue)"/>
-                            <path d="M28 26 Q50 2 72 26 L72 34 Q50 14 28 34 Z" fill="var(--ios-blue)" fill-opacity="0.75"/>
-                        </svg>
-                    </div>
-                    <span>پسر</span>
-                </div>
-                <div class="gender-option" data-gender="girl">
-                    <div class="gender-icon">
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                            <rect x="19" y="28" width="13" height="42" rx="6.5" fill="var(--ios-pink)" fill-opacity="0.75"/>
-                            <rect x="68" y="28" width="13" height="42" rx="6.5" fill="var(--ios-pink)" fill-opacity="0.75"/>
-                            <path d="M14 94 L24 64 L76 64 L86 94 Z" fill="var(--ios-pink)"/>
-                            <circle cx="50" cy="36" r="19" fill="var(--ios-pink)"/>
-                            <path d="M28 26 Q50 2 72 26 L72 34 Q50 14 28 34 Z" fill="var(--ios-pink)" fill-opacity="0.75"/>
-                        </svg>
-                    </div>
-                    <span>دختر</span>
-                </div>
-            </div>
+const GameState = {
+    user: { id: 'guest', first_name: 'کاربر مهمان', photo_url: null },
+    globalScore: 0,
+    totalEarned: 0, // مجموع کل امتیازی که تا الان کسب شده (برخلاف globalScore که با خرج راهنما کم می‌شود)
+    progress: {},
+    unlockedMedals: [],
+    // gender: null | 'boy' | 'girl'
+    // avatarId: رزرو شده برای انتخاب عکس پروفایل در آینده (فعلاً همیشه null)
+    // displayName: نامی که کاربر خودش برای نمایش در بازی انتخاب کرده؛ اگر
+    // null باشد، همان first_name ایتا نشان داده می‌شود (نگاه کن به
+    // getDisplayName بالاتر همین فایل).
+    settings: { sound: true, darkMode: false, gender: null, avatarId: null, displayName: null },
+    dailyChallenge: { lastCompletedDate: null, completedCount: 0 },
+    joinGate: { confirmedChannelId: null, confirmedWeekNumber: null },
+    // amount roozane: weekStartKey/claimedDaysThisWeek برای نمایش هفته‌ی
+    // جاری، lastGrantedDateKey یک محافظ یکنواخت (monotonic) اضافه‌ست تا
+    // عقب کشیدن ساعت دستگاه نتونه یک روز/هفته‌ی قبلاً گرفته‌شده رو دوباره
+    // باز کنه (توضیح کامل جلوی تابع syncDailyRewardWeek). channels: شناسه‌ی
+    // کارت‌های پاداش کانالی که برای همیشه گرفته شده‌اند.
+    rewards: {
+        daily: { weekStartKey: null, claimedDaysThisWeek: [], lastGrantedDateKey: null },
+        channels: {}
+    },
+    isDailyChallenge: false,
+    activeCategory: null,
+    activeLevelIndex: 0,
+    startTime: 0,
+    slots: [],
+    keys: []
+};
+// برای دیباگ از کنسول مرورگر در دسترس است؛ چیزی در رفتار برنامه عوض نمی‌کند.
+window.GameState = GameState;
 
-            <!-- گرید انتخاب عکس پروفایل داخل modal-avatar-picker پایین صفحه است -->
-            <button id="btn-choose-avatar-photo" class="ios-btn ghost-btn w-100 avatar-photo-btn">
-                🖼️ انتخاب عکس پروفایل
-            </button>
-        </main>
-    </div>
+const MEDALS_DB = [
+    { id: 'first_blood', name: 'اولین قدم', icon: '🩴', desc: 'اولین مرحله را حل کن',
+        check: (state) => getTotalCompleted(state) >= 1,
+        progress: (state) => `${Math.min(getTotalCompleted(state), 1)}/1` },
+    { id: 'proverbs_novice', name: 'ضرب‌المثل آموز', icon: '📜', desc: '۵۰ ضرب‌المثل را حل کن',
+        check: (state) => (state.progress['proverbs']?.length || 0) >= 50,
+        progress: (state) => `${Math.min(state.progress['proverbs']?.length || 0, 50)}/50` },
+    { id: 'movies_novice', name: 'فیلم‌باز', icon: '🎬', desc: '۵۰ فیلم و سریال را حل کن',
+        check: (state) => (state.progress['movies']?.length || 0) >= 50,
+        progress: (state) => `${Math.min(state.progress['movies']?.length || 0, 50)}/50` },
+    { id: 'countries_novice', name: 'جهانگرد', icon: '🌍', desc: '۵۰ کشور را حل کن',
+        check: (state) => (state.progress['countries']?.length || 0) >= 50,
+        progress: (state) => `${Math.min(state.progress['countries']?.length || 0, 50)}/50` },
+    // نکته: عمداً از totalEarned استفاده می‌کنیم نه globalScore، چون globalScore با
+    // خرج کردن روی راهنما کم می‌شود و ممکن بود کاربری که واقعاً ۵۰۰۰ امتیاز کسب
+    // کرده ولی خرج کرده، هیچ‌وقت این مدال را نگیرد.
+    { id: 'rich', name: 'ثروتمند', icon: '💎', desc: '۵۰۰۰ امتیاز کسب کن',
+        check: (state) => state.totalEarned >= 5000,
+        progress: (state) => `${Math.min(state.totalEarned, 5000)}/5000` },
+    { id: 'daily_fan', name: 'اهل چالش روزانه', icon: '🔥', desc: '۱۰ چالش روزانه را حل کن',
+        check: (state) => (state.dailyChallenge?.completedCount || 0) >= 10,
+        progress: (state) => `${Math.min(state.dailyChallenge?.completedCount || 0, 10)}/10` },
+    { id: 'all_categories', name: 'استاد بازی', icon: '👑', desc: 'همه دسته‌ها را صد‌درصد کامل کن',
+        check: (state) => DB.categories.length > 0 && DB.categories.every(c => (state.progress[c.id]?.length || 0) >= c.levels.length),
+        progress: (state) => {
+            const total = DB.categories.reduce((s, c) => s + c.levels.length, 0);
+            const done = DB.categories.reduce((s, c) => s + Math.min(state.progress[c.id]?.length || 0, c.levels.length), 0);
+            return `${done}/${total}`;
+        } }
+];
 
-    <div id="modal-edit-name" class="modal-overlay hidden">
-        <div class="ios-modal pop-in">
-            <h2>تغییر نام</h2>
-            <p>نام جدیدی که می‌خواهی در بازی نشان داده شود را وارد کن.</p>
-            <input type="text" id="edit-name-input" class="text-input" maxlength="40" placeholder="نام شما">
-            <div class="suggestions-actions" style="margin-top:16px;">
-                <button type="button" id="btn-cancel-name" class="ios-btn ghost-btn">انصراف</button>
-                <button type="button" id="btn-save-name" class="ios-btn primary-btn">ذخیره</button>
-            </div>
-        </div>
-    </div>
+// نمای کشویی «کانال‌های ما»: هر آبجکت یک کارت قابل سوایپ می‌سازد (هر
+// PROMO_ROTATE_INTERVAL_MS خودش می‌چرخد). دو نوع کارت پشتیبانی می‌شود:
+//   type: 'channel'  → کارت معرفی کانال (name, handle, desc, iconType, link, theme)
+//   type: 'ad'       → کارت تبلیغ، ظاهر و رنگش عمداً متفاوته که کاربر سریع
+//                      بفهمه تبلیغه (badge, desc, iconType, link, buttonText)
+// برای افزودن کانال جدید، فقط یک آبجکت دیگر شبیه پایین به آرایه اضافه کن.
+// theme برای کانال‌ها: 'tech' / 'poetry' / 'meme' (یا خالی برای آبی پیش‌فرض).
+// iconType باید یکی از کلیدهای PROMO_ICONS باشد (چند خط پایین‌تر همین فایل)؛
+// این آیکون فقط وقتی نمایش داده می‌شود که عکس پروفایل واقعی موجود نباشد.
+// photoKey → کلید مربوطه در channel-photos.js (فایل جدا برای عکس‌های
+// پروفایل)؛ اگر آنجا عکسی برای این کلید ثبت شده باشد همان نمایش داده
+// می‌شود، وگرنه آیکون SVG (iconType) جایگزینش می‌شود.
+const CHANNEL_PROMOS = [
+    {
+        type: 'channel',
+        name: 'آواي‌خـــــــــیال',
+        handle: '@avay_khiyal',
+        desc: 'کانال شعر؛ اگه دلت یه گوشه‌ی آروم برای خوندن شعر می‌خواد، بیا اینجا',
+        iconType: 'poetry',
+        photoKey: 'avay_khiyal',
+        link: AVAY_KHIYAL_LINK,
+        theme: 'poetry'
+    },
+    {
+        type: 'ad',
+        name: 'تبلیغات عمو',
+        handle: '@tab_amoo',
+        badge: 'Ads',
+        iconType: 'ad',
+        photoKey: '@tab_amoo',
+        desc: 'برای رزرو تبلیغات پیام بدهید.',
+        link: 'https://eitaa.com/tab_amoo',
+        buttonText: 'مشاهده'
+        // برای ثبت تبلیغ جدید، فقط همین چند خط را عوض کن (و در صورت وجود
+        // عکس تبلیغ‌کننده، کلید photoKey را در channel-photos.js هم پر کن).
+        // برای مخفی کردن موقت این کارت، active: false اضافه کن.
+    },
+    {
+        type: 'channel',
+        name: 'تِک نور | 𝙏𝙚𝙘𝙝 𝙣𝙤𝙪𝙧',
+        handle: '@Tech_nour',
+        desc: 'اخبار هوش مصنوعی و آپدیت‌های بازی رو اینجا دنبال کن',
+        iconType: 'tech',
+        photoKey: 'tech_nour',
+        link: TECH_NOUR_LINK,
+        theme: 'tech'
+    },
+    {
+        type: 'channel',
+        name: 'Rasa Meme | رسامیم',
+        handle: '@Rasa_Meme',
+        desc: 'یسری میم جذاب و فان',
+        iconType: 'meme',
+        photoKey: 'rasa_meme',
+        link: 'https://eitaa.com/Rasa_Meme',
+        theme: 'meme'
+    }
+];
 
-    <div id="modal-avatar-picker" class="modal-overlay hidden">
-        <div class="ios-modal slide-up avatar-picker-modal">
-            <div class="modal-header">
-                <h2>🖼️ انتخاب عکس پروفایل</h2>
-                <button class="close-btn" data-close="modal-avatar-picker">×</button>
-            </div>
-            <div class="avatar-picker-grid" id="avatar-picker-grid"></div>
-        </div>
-    </div>
+// آیکون‌های خط-محور (line icons) به سبک بقیه‌ی آیکون‌های SVG همین اپ (به‌جای
+// ایموجی ساده)، برای هر «نوع» کارت کانال. عمداً فقط از شکل‌های هندسی ساده
+// (دایره/مستطیل/خط) ساخته شده‌اند تا روی هر پس‌زمینه‌ای تمیز و شارپ دیده بشن.
+const PROMO_ICONS = {
+    tech: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="18" y="55" width="14" height="27" rx="4" fill="#fff"/>
+        <rect x="43" y="38" width="14" height="44" rx="4" fill="#fff"/>
+        <rect x="68" y="20" width="14" height="62" rx="4" fill="#fff" fill-opacity="0.9"/>
+    </svg>`,
+    poetry: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M50 28V76" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+        <path d="M50 32C37 24 24 25 15 30V72C24 67 37 66 50 74" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M50 32C63 24 76 25 85 30V72C76 67 63 66 50 74" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>`,
+    meme: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="50" cy="50" r="34" fill="#fff"/>
+        <circle cx="38" cy="45" r="5.5" fill="#3a2a55"/>
+        <circle cx="62" cy="45" r="5.5" fill="#3a2a55"/>
+        <path d="M32 58C38 72 62 72 68 58" stroke="#3a2a55" stroke-width="6" stroke-linecap="round" fill="none"/>
+    </svg>`,
+    ad: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="50" cy="50" r="32" stroke="#fff" stroke-width="7"/>
+        <circle cx="50" cy="50" r="18" stroke="#fff" stroke-width="7"/>
+        <circle cx="50" cy="50" r="5" fill="#fff"/>
+    </svg>`
+};
 
-    <!-- Modals -->
-    <div id="modal-join-gate" class="modal-overlay hidden">
-        <div class="ios-modal pop-in join-gate-modal">
-            <div class="modal-icon join-gate-icon">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="white" stroke="none"/></svg>
-            </div>
-            <h2>قبل از شروع...</h2>
-            <!-- توضیح هر کانال مستقیماً همینجا نوشته شده تا بدون باز کردن هیچ
-                 فایل JS دیگری، فقط با ویرایش همین index.html قابل تغییر باشد.
-                 هر بار فقط یکی از این بلوک‌ها (همانی که «کانال فعالِ همین
-                 هفته» است) نمایش داده می‌شود؛ app.js با توجه به
-                 data-channel-id تشخیص می‌دهد کدام‌یک را نشان دهد. -->
-            <div class="join-gate-channel-block hidden" data-channel-id="avay_khiyal">
-                <p class="join-gate-msg">🎨  دیگه وقتشه به روحت احساسات خوب بدی 👇</p>
-                <ul class="join-gate-benefits">
-                    <li><span class="jg-icon">🌙</span> لحظه‌های آرام با محتوای احساسی و متفاوت</li>
-                    <li><span class="jg-icon">🖼️</span> پست‌هایی که واقعاً چشم‌نوازن</li>
-                    <li><span class="jg-icon">💭</span> متن‌های خاصی که یه حس تازه می‌دن</li>
-                    <li><span class="jg-icon">✨</span> اشعاری که دلت می‌خواد بازم بخونیشون</li>
-                    <li><span class="jg-icon">🫶</span> یه فضای آروم، فقط برای خودت</li>
-                </ul>
-            </div>
-            <div class="join-gate-channel-block hidden" data-channel-id="tech_nour">
-                <p class="join-gate-msg">💡 وقتشه بیشتر با تکنولوژی آشنا بشی 👇</p>
-                <ul class="join-gate-benefits">
-                    <li><span class="jg-icon">📱</span> اخبار داغ دنیای تکنولوژی</li>
-                    <li><span class="jg-icon">💻</span> معرفی ابزارها و برنامه‌های کاربردی</li>
-                    <li><span class="jg-icon">🧠</span> ترفندهایی که واقعاً به کارت میان</li>
-                    <li><span class="jg-icon">🔥</span> همیشه به‌روز، همیشه جدید</li>
-                    <li><span class="jg-icon">⚡</span> محتوای کاربردی و مفید</li>
-                </ul>
-            </div>
-            <div class="join-gate-channel-block hidden" data-channel-id="rasa_meme">
-                <p class="join-gate-msg">😂 با رسامیم شادی رو به خودت هدیه بده 👇</p>
-                <ul class="join-gate-benefits">
-                    <li><span class="jg-icon">🤣</span> میم‌هایی که حسابی می‌خندونن</li>
-                    <li><span class="jg-icon">🎭</span> طنزهایی که کیفش رو می‌بری</li>
-                    <li><span class="jg-icon">😂</span> یه وقفه‌ی خنده وسط روزت</li>
-                    <li><span class="jg-icon">🔥</span> همیشه یه میم تازه منتظرته</li>
-                    <li><span class="jg-icon">🫠</span> برای هر سلیقه‌ای، یه چیزی داره</li>
-                </ul>
-            </div>
+function getPromoIconMarkup(iconType) {
+    return PROMO_ICONS[iconType] || PROMO_ICONS.tech;
+}
 
-            <div class="join-gate-channels" id="join-gate-channels"></div>
+// عکس پروفایل کانال/تبلیغ‌کننده را داخل container (همان .channel-promo-icon)
+// می‌گذارد. عکس‌ها در فایل جداگانه‌ی channel-photos.js (متغیر CHANNEL_PHOTOS)
+// نگهداری می‌شوند تا تغییرشان نیازی به دست‌زدن به این فایل نداشته باشد.
+// اگر برای این photoKey عکسی ثبت نشده باشد، یا لود عکس با خطا مواجه شود
+// (لینک خراب/حذف‌شده)، به‌طور خودکار به همان آیکون SVG طراحی‌شده (iconType)
+// برمی‌گردد؛ یعنی کاربر هیچ‌وقت جای خالی یا آیکون شکسته نمی‌بیند.
+function populateChannelIcon(container, photoKey, iconType) {
+    const entry = typeof CHANNEL_PHOTOS !== 'undefined' && photoKey ? CHANNEL_PHOTOS[photoKey] : null;
+    const photoUrl = entry && entry.photo;
+    if (!photoUrl) {
+        container.innerHTML = getPromoIconMarkup(iconType);
+        return;
+    }
+    const img = document.createElement('img');
+    img.src = photoUrl;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.addEventListener('error', () => {
+        container.innerHTML = getPromoIconMarkup(iconType);
+    }, { once: true });
+    container.innerHTML = '';
+    container.appendChild(img);
+}
 
-            <button id="btn-confirm-joined" class="ios-btn ghost-btn w-100">✅ بررسی عضویت و ادامه</button>
-        </div>
-    </div>
+function getTotalCompleted(state) {
+    return Object.values(state.progress).reduce((sum, arr) => sum + arr.length, 0);
+}
 
-    <div id="modal-success" class="modal-overlay hidden">
-        <div class="ios-modal pop-in">
-            <div class="modal-icon success-icon">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-            </div>
-            <h2>آفرین! درست حدس زدی 🎉</h2>
-            <p>پاسخ شما کاملاً درست بود.</p>
-            <div class="reward-box">
-                <span class="reward-row">🪙 امتیاز مرحله: <strong id="reward-base-score">+10</strong></span>
-            </div>
-            <button id="btn-next-level" class="ios-btn success-btn w-100">ادامه بازی 🚀</button>
-        </div>
-    </div>
+// --- نام نمایشی قابل‌ویرایش کاربر ---
+const DISPLAY_NAME_MAX_LENGTH = 20;
 
-    <div id="modal-settings" class="modal-overlay hidden">
-        <div class="ios-modal slide-up settings-modal">
-            <div class="modal-header">
-                <h2>⚙️ تنظیمات</h2>
-                <button class="close-btn" data-close="modal-settings">×</button>
-            </div>
+// همه‌جای بازی که اسم کاربر نشان داده می‌شود (هدر صفحه اصلی، صفحه پروفایل)
+// باید از همین تابع استفاده کند، نه مستقیم از GameState.user.first_name —
+// اینطوری اگر کاربر اسم دلخواه انتخاب کرده باشد همه‌جا یکسان به‌روز است.
+function getDisplayName() {
+    return GameState.settings.displayName || GameState.user.first_name || 'کاربر مهمان';
+}
 
-            <div class="settings-group-title">جایزه</div>
-            <div class="ios-list">
-                <div class="ios-list-item clickable" id="btn-open-rewards">
-                    <div class="setting-label">
-                        <span class="setting-icon-square icon-rewards">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
-                        </span>
-                        <span>جایزه</span>
-                    </div>
-                    <span class="setting-version">‹</span>
-                </div>
-            </div>
+// اعتبارسنجی/پاک‌سازی نام ورودی کاربر. کاراکتر خاصی محدود نشده (فارسی،
+// انگلیسی، عدد، ایموجی همه مجازند)، فقط:
+//   ۱. فاصله‌های اضافه‌ی ابتدا/انتها حذف می‌شود
+//   ۲. کاراکترهای کنترلی نامرئی (که می‌توانند چیدمان را به‌هم بریزند) حذف می‌شوند
+//   ۳. طول به DISPLAY_NAME_MAX_LENGTH محدود می‌شود
+// خروجی یا رشته‌ی پاک‌شده‌ی معتبر است، یا null (یعنی نامعتبر/خالی). چون همه‌جا
+// با .textContent (نه innerHTML) رندر می‌شود، تزریق HTML/اسکریپت از همان
+// مسیر رندر هم به‌طور خودکار مسدود است؛ این تابع فقط چیدمان/طول را کنترل
+// می‌کند، نه امنیت رندر را (که جای دیگری قبلاً تضمین شده).
+function sanitizeDisplayName(raw) {
+    if (typeof raw !== 'string') return null;
+    let cleaned = raw.replace(/[\u0000-\u001F\u007F]/g, '');
+    cleaned = cleaned.trim().replace(/\s+/g, ' ');
+    if (cleaned.length === 0) return null;
+    // برش بر مبنای کدپوینت (نه UTF-16 code unit) تا وسط یک ایموجی چندبخشی برش نخورد
+    const codepoints = Array.from(cleaned);
+    if (codepoints.length > DISPLAY_NAME_MAX_LENGTH) {
+        cleaned = codepoints.slice(0, DISPLAY_NAME_MAX_LENGTH).join('');
+    }
+    return cleaned;
+}
 
-            <div class="settings-group-title">صدا و نمایش</div>
-            <div class="ios-list">
-                <div class="ios-list-item">
-                    <div class="setting-label">
-                        <span class="setting-icon-square icon-sound">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-                        </span>
-                        <span>صداهای بازی</span>
-                    </div>
-                    <label class="ios-switch">
-                        <input type="checkbox" id="toggle-sound" checked>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div class="ios-list-item">
-                    <div class="setting-label">
-                        <span class="setting-icon-square icon-dark">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg>
-                        </span>
-                        <span>حالت تاریک</span>
-                    </div>
-                    <label class="ios-switch">
-                        <input type="checkbox" id="toggle-theme">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="settings-group-title">درباره برنامه</div>
-            <div class="ios-list">
-                <div class="ios-list-item clickable" id="btn-open-changelog">
-                    <div class="setting-label">
-                        <span class="setting-icon-square icon-changelog">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                        </span>
-                        <span>نسخه‌ی جدید برنامک</span>
-                    </div>
-                    <span class="setting-version" id="settings-version-label">نسخه ۱.۰.۰</span>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <div id="modal-changelog" class="modal-overlay hidden">
-        <div class="ios-modal slide-up changelog-modal">
-            <div class="modal-header">
-                <h2>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ios-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px; margin-left:6px;"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                    نسخه‌ی جدید برنامک
-                </h2>
-                <button class="close-btn" data-close="modal-changelog">×</button>
-            </div>
-            <div class="changelog-body" id="changelog-body"></div>
-        </div>
-    </div>
-
-    <div id="modal-rewards" class="modal-overlay hidden">
-        <div class="ios-modal slide-up rewards-modal">
-            <div class="modal-header">
-                <h2>🎁 جایزه</h2>
-                <button class="close-btn" data-close="modal-rewards">×</button>
-            </div>
-            <div class="rewards-body">
-                <div class="daily-reward-card">
-                    <div class="daily-reward-title">🎁 امتیاز روزانه</div>
-                    <div class="daily-reward-sub">هر روز (شنبه تا جمعه) یک‌بار، بین ۱۰ تا ۸۵ سکه رایگان بگیر</div>
-                    <div class="daily-reward-pips" id="daily-reward-pips"></div>
-                    <button type="button" id="btn-claim-daily-reward" class="ios-btn daily-reward-btn">🎁 دریافت امتیاز امروز</button>
-                </div>
-
-                <div class="reward-channels-title">عضویت در کانال‌ها</div>
-                <div class="reward-channels-list" id="reward-channels-list"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- پیام اطلاع‌رسانی قبل از باز شدن کانال پاداش. متن این پاراگراف
-         داینامیک است و هر بار قبل از نمایش، با نام همان کانال توسط جاوااسکریپت
-         پر می‌شود (نگاه کن به تابع openRewardChannelInfo در app.js) -->
-    <div id="modal-reward-join-info" class="modal-overlay hidden">
-        <div class="ios-modal pop-in reward-join-info-modal">
-            <div class="modal-icon join-gate-icon">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="white" stroke="none"/></svg>
-            </div>
-            <h2>قبل از عضویت</h2>
-            <p id="reward-join-info-text">برای دریافت سکه، لطفاً داخل کانال عضو شوید و پست‌ها را با دقت و به‌آرامی سین کنید تا سکه‌های شما فعال شوند.</p>
-            <button type="button" id="btn-reward-enter-channel" class="ios-btn primary-btn w-100">ورود به کانال</button>
-            <button type="button" class="ios-btn ghost-btn w-100 close-btn" data-close="modal-reward-join-info">بعداً</button>
-        </div>
-    </div>
-
-    <div id="toast-container" class="toast-container"></div>
-
-    <!-- اسکریپت تبلیغات Adly (با defer، چون خودش هم فقط بعد از رویداد load اجرا می‌شود) -->
-    <script src="https://myadino.ir/widget/adly-widget.js" defer></script>
-    <script>
-        window.addEventListener('load', function() {
-            if (typeof AdlyWidget !== 'undefined') {
-                AdlyWidget.init({
-                    apiKey: '2ce718bece973eefeede5b00822735aa',
-                    containerId: 'adly-container',
-                    barnamk: 'razakplus_app',
-                    appRef: 31
-                });
-            }
+/* =========================================
+   1. Cloud Storage Sync (KVDB)
+========================================= */
+const StorageManager = {
+    // ⚠️ قفل ایمنی: تا وقتی load() یک‌بار با موفقیت (یا با اطمینان از «کاربر
+    // واقعاً جدید است») تمام نشده، save() هیچ‌کاری نمی‌کند. بدون این قفل،
+    // اگر بارگذاری امتیاز به هر دلیلی (قطعی شبکه، خطای KVDB، schema نامعتبر)
+    // شکست بخورد، GameState با مقادیر پیش‌فرض (globalScore: 0) باقی می‌ماند
+    // و اولین save() همان صفر را روی رکورد واقعی کاربر در KVDB می‌نویسد —
+    // دقیقاً همان الگوی «امتیاز صفر شد» که هرگز نباید اتفاق بیفتد.
+    ready: false,
+    getKey: () => `eitaa_game_${GameState.user.id}`,
+    save: async function() {
+        if (!this.ready) {
+            console.warn('StorageManager.save() قبل از پایان load() فراخوانی شد؛ برای جلوگیری از رونویسی دیتای واقعی نادیده گرفته شد.');
+            return;
+        }
+        const payload = JSON.stringify({
+            globalScore: GameState.globalScore,
+            totalEarned: GameState.totalEarned,
+            progress: GameState.progress,
+            unlockedMedals: GameState.unlockedMedals,
+            settings: GameState.settings,
+            dailyChallenge: GameState.dailyChallenge,
+            joinGate: GameState.joinGate,
+            rewards: GameState.rewards
         });
-    </script>
-    <script src="index.js"></script>
-    <script src="channel-photos.js"></script>
-    <script src="reward-channels.js"></script>
-    <script src="app.js"></script>
-</body>
-</html>
+        localStorage.setItem(this.getKey(), payload);
+        if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
+            try { await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`, { method: 'PUT', body: payload }); } catch (e) {}
+        }
+    },
+    load: async function(callback) {
+        let finalData = null;
+        let cloudWasAttempted = false;
+        let cloudFailedUnexpectedly = false; // true فقط برای خطای واقعی، نه برای «۴۰۴ یعنی کاربر جدید»
+        if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
+            cloudWasAttempted = true;
+            try {
+                const response = await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`);
+                if (response.ok) {
+                    finalData = await response.text();
+                } else if (response.status !== 404) {
+                    cloudFailedUnexpectedly = true;
+                }
+            } catch (e) {
+                cloudFailedUnexpectedly = true;
+            }
+        }
+        if (!finalData) finalData = localStorage.getItem(this.getKey());
+
+        if (finalData) {
+            try {
+                const data = JSON.parse(finalData);
+                GameState.globalScore = data.globalScore || 0;
+                // برای کسانی که از قبل پیشرفت داشته‌اند و totalEarned ذخیره‌شده ندارند،
+                // globalScore فعلی را به‌عنوان تخمین اولیه در نظر می‌گیریم تا مدال «ثروتمند»
+                // ناگهان قفل نشود.
+                GameState.totalEarned = typeof data.totalEarned === 'number' ? data.totalEarned : (data.globalScore || 0);
+                GameState.progress = data.progress || {};
+                GameState.unlockedMedals = data.unlockedMedals || [];
+                GameState.settings = { ...GameState.settings, ...(data.settings || {}) };
+                GameState.dailyChallenge = data.dailyChallenge || { lastCompletedDate: null, completedCount: 0 };
+                GameState.joinGate = data.joinGate || { confirmedChannelId: null, confirmedWeekNumber: null };
+                // با ...(اسپرد) روی مقدار پیش‌فرض merge می‌کنیم، نه جایگزینی
+                // کامل، تا کاربرهایی که از قبل دیتا دارن ولی این فیلد رو
+                // ندارن (نسخه‌ی قبل از این آپدیت) خطا نگیرن و مقدار پیش‌فرض
+                // امن جایگزین بشه.
+                GameState.rewards = {
+                    daily: { weekStartKey: null, claimedDaysThisWeek: [], lastGrantedDateKey: null, ...(data.rewards && data.rewards.daily) },
+                    channels: (data.rewards && data.rewards.channels) || {}
+                };
+                this.ready = true;
+            } catch (e) {
+                // دیتا وجود داشت ولی خراب/ناسازگار بود؛ به‌جای رفتن به مقادیر
+                // پیش‌فرض و ذخیره‌ی صفر روی آن، save() را قفل نگه می‌داریم تا
+                // کاربر حداقل در همین نشست دیتای خرابش رونویسی نشود.
+                console.error('داده‌ی ذخیره‌شده معتبر نبود، از رونویسی آن جلوگیری شد:', e);
+                this.ready = false;
+            }
+        } else if (cloudWasAttempted && cloudFailedUnexpectedly) {
+            // کلاود بود ولی گرفتنش شکست خورد (نه ۴۰۴) و لوکال هم چیزی نداشت.
+            // این می‌تواند یعنی همین الان اتصال قطع است، نه اینکه کاربر واقعاً
+            // جدید است. save() را قفل می‌کنیم تا صفر روی رکورد واقعی ننشیند.
+            this.ready = false;
+            if (typeof showToast === 'function') {
+                showToast('⚠️', 'مشکل در اتصال به سرور؛ پیشرفت شما بارگذاری نشد');
+            }
+        } else {
+            // نه دیتای کلاود بود نه لوکال، و کلاود هم واقعاً ۴۰۴/غیرفعال بود
+            // (نه خطای شبکه) → این واقعاً یک کاربر جدید است، صفر بودن درست است.
+            this.ready = true;
+        }
+        callback();
+    }
+};
+
+/* =========================================
+   2. Super Fast Apple Emoji Engine
+========================================= */
+const emojiSegmentCache = {}; // کش گرافیم‌ها برای سرعت رندر دفعات بعد
+const EMOJI_CDN_BASE = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.0.1/img/apple/64/';
+
+// استخراج تمام کدپوینت‌های یک گرافیم (نه فقط کدپوینت اول!) با پدینگ ۴ رقمی هگز.
+// نکته مهم: ایموجی‌های ترکیبی مثل 👂🏻 (گوش + رنگ پوست)، 🧙‍♂️ (ZWJ)
+// یا 1️⃣ (کیکپ) از چند کدپوینت تشکیل شده‌اند؛ اگر فقط کدپوینت اول گرفته شود
+// (مثل نسخه قبلی)، بخش دوم ایموجی (رنگ پوست، جنسیت، کیکپ و ...) گم می‌شود.
+function getPaddedHexCodes(segment) {
+    let hexCodes = [];
+    for (let i = 0; i < segment.length; i++) {
+        let code = segment.codePointAt(i);
+        if (code > 0xFFFF) i++; // سوروگیت پایین را رد کن
+        hexCodes.push(code.toString(16).padStart(4, '0'));
+    }
+    return hexCodes;
+}
+
+// شکستن متن به گرافیم‌ها (کاراکترهای مستقل بصری). نتیجه کش می‌شود چون
+// هر مرحله بارها رندر می‌شود ولی محاسبه‌ی گرافیم‌ها فقط لازم است یک‌بار انجام شود.
+function getGraphemeSegments(text) {
+    if (emojiSegmentCache[text]) return emojiSegmentCache[text];
+    let segments = [];
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+        for (const { segment } of segmenter.segment(text)) segments.push(segment);
+    } else {
+        // حالت fallback برای مرورگرهای قدیمی: دنباله‌های ZWJ/رنگ‌پوست/کیکپ را هم می‌گیرد
+        const emojiRegex = /([\u{1f300}-\u{1f9ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{2190}-\u{21ff}\u{2300}-\u{23ff}0-9#*](?:[\u{fe0f}\u{200d}\u{1f3fb}-\u{1f3ff}\u{20e3}]|[\u{1f300}-\u{1f9ff}])*)/gu;
+        let lastIndex = 0;
+        for (const m of text.matchAll(emojiRegex)) {
+            if (m.index > lastIndex) segments.push(text.slice(lastIndex, m.index));
+            segments.push(m[0]);
+            lastIndex = m.index + m[0].length;
+        }
+        if (lastIndex < text.length) segments.push(text.slice(lastIndex));
+    }
+    emojiSegmentCache[text] = segments;
+    return segments;
+}
+
+// اگر عکس دقیق پیدا نشد، ابتدا نسخه‌ی جایگزین را امتحان کن،
+// و در نهایت خود ایموجی را به صورت متن سیستم نشان بده (به جای آیکون شکسته).
+// این تابع با addEventListener وصل می‌شود، نه با attribute «onerror=""»، چون
+// خیلی از وب‌ویوهای اپ‌های پیام‌رسان (مثل ایتا) به‌خاطر سیاست امنیتی CSP
+// اجرای event handlerهای درون-خطی (inline) را بی‌صدا مسدود می‌کنند و باعث
+// می‌شدند ایموجی‌هایی مثل ☁️ برای همیشه به شکل آیکون شکسته بمانند.
+function handleEmojiImgError(e) {
+    const img = e.target;
+    if (img.dataset.stage === 'fallback') {
+        const span = document.createElement('span');
+        span.textContent = img.dataset.native;
+        span.className = 'apple-emoji apple-emoji-native';
+        img.replaceWith(span);
+        return;
+    }
+    img.dataset.stage = 'fallback';
+    img.src = img.dataset.fallback;
+}
+
+function buildEmojiImg(segment) {
+    const hex = getPaddedHexCodes(segment);
+    // برای اکثریت ایموجی‌های این بازی (نماد ساده + FE0F مثل ☁️، ⛰️، 🌧️)
+    // نام فایل CDN بدون fe0f است، پس همان را اول امتحان می‌کنیم.
+    // فقط دنباله‌های خاص مثل کیکپ‌ها (0031-fe0f-20e3.png) fe0f را نگه می‌دارند
+    // که به عنوان حالت دوم امتحان می‌شود.
+    const withoutFe0f = hex.filter(c => c !== 'fe0f').join('-');
+    const withFe0f = hex.join('-');
+
+    const img = document.createElement('img');
+    img.src = `${EMOJI_CDN_BASE}${withoutFe0f}.png`;
+    img.dataset.fallback = `${EMOJI_CDN_BASE}${withFe0f}.png`;
+    img.dataset.native = segment;
+    img.alt = segment;
+    // این تصاویر همیشه همون چیزی هستن که کاربر باید فوراً ببینه (خود معمای
+    // بازی)، پس lazy-load نباید باشن؛ برعکس، اولویت بالا می‌گیرن تا زودتر بیان.
+    img.decoding = 'async';
+    img.fetchPriority = 'high';
+    img.className = 'apple-emoji';
+    img.addEventListener('error', handleEmojiImgError);
+    return img;
+}
+
+// container: عنصر DOM که ایموجی‌ها داخلش رندر می‌شوند. text: رشته‌ی ایموجی مرحله.
+function renderAppleEmojis(container, text) {
+    container.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    getGraphemeSegments(text).forEach(segment => {
+        if (segment.trim() === '') {
+            frag.appendChild(document.createTextNode(segment));
+            return;
+        }
+        frag.appendChild(buildEmojiImg(segment));
+    });
+    container.appendChild(frag);
+}
+
+// بعد از اینکه صفحه اصلی نمایش داده شد، در پس‌زمینه (بدون کند کردن چیزی)
+// تصاویر ایموجی چند مرحله اول هر دسته را در کش مرورگر گرم می‌کنیم؛ همین باعث
+// می‌شود اولین باری که کاربر وارد یک دسته می‌شود، عکس‌ها فوراً بیایند نه اینکه
+// آن لحظه منتظر دانلود از CDN بماند.
+function preloadUpcomingEmojis() {
+    if (!DB || !DB.categories) return;
+    const PRELOAD_LEVELS_PER_CATEGORY = 3;
+    DB.categories.forEach(cat => {
+        cat.levels.slice(0, PRELOAD_LEVELS_PER_CATEGORY).forEach(lvl => {
+            getGraphemeSegments(lvl.emoji).forEach(segment => {
+                if (segment.trim() === '') return;
+                const hex = getPaddedHexCodes(segment).filter(c => c !== 'fe0f').join('-');
+                const img = new Image();
+                img.src = `${EMOJI_CDN_BASE}${hex}.png`;
+            });
+        });
+    });
+}
+
+
+/* =========================================
+   3. Audio Engine
+========================================= */
+const AudioEngine = (function() {
+    let audioCtx = null;
+    function init() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+    function playTone(freq, type, dur, vol = 0.05) {
+        if (!GameState.settings.sound) return;
+        init();
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+    return {
+        tap: () => playTone(600, 'sine', 0.1, 0.02), pop: () => playTone(400, 'triangle', 0.1, 0.03), error: () => playTone(150, 'sawtooth', 0.3, 0.05),
+        success: () => { playTone(400, 'sine', 0.1); setTimeout(() => playTone(600, 'sine', 0.15), 100); }, medal: () => { playTone(500, 'sine', 0.1); setTimeout(() => playTone(800, 'sine', 0.3), 100); }
+    };
+})();
+
+/* =========================================
+   4. UI Management & Eitaa Navigation
+========================================= */
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+}
+
+function applyTheme() {
+    document.body.setAttribute('data-theme', GameState.settings.darkMode ? 'dark' : 'light');
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.setHeaderColor) {
+        window.Eitaa.WebApp.setHeaderColor(GameState.settings.darkMode ? '#000000' : '#f2f2f7');
+    }
+}
+
+// دکمه بازگشت اصلی
+function goBackToHome() {
+    AudioEngine.tap(); 
+    renderHome(); 
+    showScreen('screen-home');
+    
+    // مخفی کردن دکمه بازگشت سیستمی ایتا
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+        window.Eitaa.WebApp.BackButton.hide();
+    }
+}
+
+// وب‌ویوی داخل اپ ایتا معمولاً ناوبری مستقیم <a> یا window.open را مسدود
+// می‌کند، پس باید از متدهای رسمی خود SDK استفاده کنیم:
+//   1) openEitaaLink → مخصوص لینک‌های خود ایتا (eitaa.com/...)، دقیقاً مثل
+//      openTelegramLink در تلگرام؛ کاربر را بدون خروج از اپ مستقیم می‌برد
+//      روی صفحه کانال برای جوین شدن.
+//   2) openLink → بازکننده عمومی لینک (fallback، وقتی متد اول در دسترس نبود).
+//   3) window.open → فقط برای زمانی که خارج از اپ ایتا (مرورگر معمولی) تست
+//      می‌کنیم و اصلاً SDK لود نشده.
+function openExternalLink(url) {
+    const wa = window.Eitaa && window.Eitaa.WebApp;
+    if (wa && typeof wa.openEitaaLink === 'function') {
+        wa.openEitaaLink(url);
+    } else if (wa && typeof wa.openLink === 'function') {
+        wa.openLink(url);
+    } else {
+        window.open(url, '_blank', 'noopener');
+    }
+}
+
+// --- آیکون‌های آواتار پروفایل (به‌جای ایموجی 👤/👦/👧) ---
+// طراحی عمداً ساده و هندسی است (فقط دایره/مستطیل/دو منحنی Q برای هر مدل مو)
+// تا سبک‌وزن بماند و روی هر پس‌زمینه‌ای شارپ دیده بشه. اگر بعداً خواستی
+// آواتارهای آماده/عکس دلخواه اضافه کنی (طبق درخواستی که دادی)، همینجا یک
+// کلید تازه به AVATAR_ICONS اضافه کن و در GameState.settings.avatarId مقدار
+// همون کلید را ذخیره کن؛ applyAvatarVisual خودش کارهای بعدی (نمایش/پس‌زمینه)
+// را انجام می‌دهد.
+const AVATAR_SHOULDERS = `<path d="M14 94 L24 64 L76 64 L86 94 Z" fill="#fff" fill-opacity="0.95"/><circle cx="50" cy="36" r="19" fill="#fff" fill-opacity="0.95"/>`;
+const AVATAR_TOP_HAIR = `<path d="M28 26 Q50 2 72 26 L72 34 Q50 14 28 34 Z" fill="#fff" fill-opacity="0.85"/>`;
+const AVATAR_ICONS = {
+    neutral: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${AVATAR_SHOULDERS}</svg>`,
+    boy: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${AVATAR_SHOULDERS}${AVATAR_TOP_HAIR}</svg>`,
+    girl: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="19" y="28" width="13" height="42" rx="6.5" fill="#fff" fill-opacity="0.85"/>
+        <rect x="68" y="28" width="13" height="42" rx="6.5" fill="#fff" fill-opacity="0.85"/>
+        ${AVATAR_SHOULDERS}${AVATAR_TOP_HAIR}
+    </svg>`
+};
+
+// عنصر آواتار (هدر صفحه اصلی یا صفحه پروفایل) را بر اساس عکس ایتا (اگر بود)
+// یا آیکون جنسیت انتخابی کاربر پر می‌کند، و کلاس گرادیان پس‌زمینه متناسب با
+// جنسیت را ست می‌کند (آبی برای پسر، صورتی برای دختر، آبی خنثی پیش‌فرض).
+function applyAvatarVisual(avatarEl, gender) {
+    avatarEl.classList.remove('gender-boy', 'gender-girl');
+    if (gender === 'boy') avatarEl.classList.add('gender-boy');
+    if (gender === 'girl') avatarEl.classList.add('gender-girl');
+
+    const avatarId = GameState.settings.avatarId;
+    if (avatarId) {
+        avatarEl.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = `Profile/${avatarId}.jpg`;
+        img.alt = 'Profile';
+        img.addEventListener('error', () => {
+            // اگه فایل عکس پیدا نشد (مثلاً پاک/جابه‌جا شده)، به‌جای آیکون شکسته
+            // برمی‌گردیم به همون آیکون هندسی جنسیت
+            avatarEl.innerHTML = AVATAR_ICONS[gender] || AVATAR_ICONS.neutral;
+            avatarEl.style.background = '';
+        });
+        avatarEl.appendChild(img);
+        avatarEl.style.background = 'transparent';
+        return;
+    }
+
+    if (GameState.user.photo_url) {
+        avatarEl.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = GameState.user.photo_url;
+        img.alt = 'Profile';
+        img.addEventListener('error', () => {
+            avatarEl.innerHTML = AVATAR_ICONS[gender] || AVATAR_ICONS.neutral;
+            avatarEl.style.background = '';
+        });
+        avatarEl.appendChild(img);
+        avatarEl.style.background = 'transparent';
+    } else {
+        avatarEl.innerHTML = AVATAR_ICONS[gender] || AVATAR_ICONS.neutral;
+        avatarEl.style.background = '';
+    }
+}
+
+// مجموعه‌ی عکس‌های آماده‌ی پروفایل (داخل پوشه‌ی Profile/). نام واقعی
+// فایل‌ها روی دیسک این الگو را دارد: profile_Boy1.jpg, profile_Girl3.jpg,
+// ... (حرف اول جنسیت بزرگ، بدون خط تیره). برای افزودن عکس بیشتر، فایل را
+// با همین الگو در پوشه‌ی Profile/ بگذار و شماره‌اش را به یکی از دو
+// آرایه‌ی زیر اضافه کن.
+const AVATAR_PHOTO_IDS = {
+    Boy: [1, 2, 3, 4, 5, 6, 7, 10, 11, 12],
+    Girl: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+};
+
+// عکس‌های پسرها و دخترها را در دو بخش جدا (با عنوان مجزا) نشان می‌دهد، نه
+// مخلوط در یک گرید — انتخاب راحت‌تر می‌شود و مشخصه هر عکس مال کدام گروهه.
+function renderAvatarPicker() {
+    const container = document.getElementById('avatar-picker-grid');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const currentAvatarId = GameState.settings.avatarId;
+
+    // گزینه‌ی «بدون عکس» — خارج از دو بخش جنسیتی، چون خنثی است
+    const noneWrap = document.createElement('div');
+    noneWrap.className = 'avatar-picker-none-wrap';
+    const noneOption = document.createElement('button');
+    noneOption.type = 'button';
+    noneOption.className = `avatar-option avatar-option-none ${!currentAvatarId ? 'selected' : ''}`;
+    noneOption.innerHTML = AVATAR_ICONS[GameState.settings.gender] || AVATAR_ICONS.neutral;
+    noneOption.addEventListener('click', () => selectAvatarPhoto(null));
+    noneWrap.appendChild(noneOption);
+    container.appendChild(noneWrap);
+
+    const sections = [
+        { key: 'Boy', label: 'پسرها' },
+        { key: 'Girl', label: 'دخترها' }
+    ];
+
+    sections.forEach(({ key: genderKey, label }) => {
+        const lowerGender = genderKey.toLowerCase(); // 'boy'/'girl' — همونی که GameState.settings.gender واقعاً استفاده می‌کنه
+
+        const sectionTitle = document.createElement('div');
+        sectionTitle.className = 'avatar-picker-section-title';
+        sectionTitle.textContent = label;
+        container.appendChild(sectionTitle);
+
+        const sectionGrid = document.createElement('div');
+        sectionGrid.className = 'avatar-picker-grid-inner';
+
+        AVATAR_PHOTO_IDS[genderKey].forEach(num => {
+            const id = `profile_${genderKey}${num}`;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `avatar-option ${currentAvatarId === id ? 'selected' : ''}`;
+            const img = document.createElement('img');
+            img.src = `Profile/${id}.jpg`;
+            img.alt = lowerGender;
+            img.loading = 'lazy';
+            img.width = 64;
+            img.height = 64;
+            // اگه یک فایل خاص گم بود، به‌جای آیکون شکسته، کل گزینه مخفی می‌شود
+            img.addEventListener('error', () => { btn.style.display = 'none'; });
+            btn.appendChild(img);
+            btn.addEventListener('click', () => selectAvatarPhoto(id, lowerGender));
+            sectionGrid.appendChild(btn);
+        });
+
+        container.appendChild(sectionGrid);
+    });
+}
+
+function selectAvatarPhoto(avatarId, matchingGender) {
+    AudioEngine.tap();
+    GameState.settings.avatarId = avatarId;
+    // انتخاب یک عکس، جنسیت متناظرش رو هم خودکار ست می‌کنه (با حروف کوچک،
+    // چون بقیه‌ی کد از جمله AVATAR_ICONS و data-gender با حروف کوچک کار
+    // می‌کنند) تا لازم نباشه کاربر جدا هم جنسیت رو انتخاب کنه هم عکس رو
+    if (matchingGender) GameState.settings.gender = matchingGender;
+    StorageManager.save();
+    renderProfile();
+    renderHome();
+    document.getElementById('modal-avatar-picker').classList.add('hidden');
+}
+
+function renderHome() {
+    document.getElementById('home-total-score').textContent = GameState.globalScore;
+    document.getElementById('user-name').textContent = getDisplayName();
+
+    applyAvatarVisual(document.getElementById('user-avatar'), GameState.settings.gender);
+
+    const medalsContainer = document.getElementById('medals-container');
+    medalsContainer.innerHTML = '';
+    MEDALS_DB.forEach(medal => {
+        const isUnlocked = GameState.unlockedMedals.includes(medal.id);
+        const div = document.createElement('div');
+        div.className = `medal-card ${isUnlocked ? 'unlocked' : ''}`;
+        const progressHtml = (!isUnlocked && medal.progress) ? `<span class="medal-progress">${medal.progress(GameState)}</span>` : '';
+        div.innerHTML = `<span class="medal-icon">${medal.icon}</span><span class="medal-name">${medal.name}</span>${progressHtml}`;
+        medalsContainer.appendChild(div);
+    });
+    document.getElementById('medals-count').textContent = `${GameState.unlockedMedals.length}/${MEDALS_DB.length}`;
+
+    const catContainer = document.getElementById('categories-container');
+    catContainer.innerHTML = '';
+    DB.categories.forEach(cat => {
+        const completed = GameState.progress[cat.id]?.length || 0;
+        const total = cat.levels.length;
+        const perc = total > 0 ? (completed / total) * 100 : 0;
+        const div = document.createElement('div');
+        // دسته‌بندی‌ای که هنوز هیچ مرحله‌ای ندارد (total === 0) به‌طور خودکار
+        // به‌شکل «قفل/به‌زودی» نمایش داده می‌شود و قابل‌کلیک نیست — این قانون
+        // عمومی است، یعنی هر دسته‌بندی جدیدی که levels آن هنوز خالی است
+        // (مثل «اصطلاحات» یا «ایده‌های شما» تا وقتی که مرحله‌ای برایش اضافه
+        // نشده) خودکار همین رفتار را می‌گیرد، بدون نیاز به هیچ کد اضافه‌ای؛
+        // به‌محض این‌که در data.json حداقل یک مرحله به levels آن اضافه شود،
+        // خودش قابل‌بازی می‌شود.
+        const isLocked = total === 0;
+        div.className = `category-card ${isLocked ? 'locked' : (completed === total ? 'completed' : '')}`;
+        div.innerHTML = `
+            <div class="cat-icon">${cat.icon}</div>
+            <div class="cat-info">
+                <h3 class="cat-title">${cat.name}</h3>
+                <div class="cat-stats">${isLocked ? 'به‌زودی...' : `${completed} از ${total} مرحله`}</div>
+                ${isLocked ? '' : `<div class="progress-track"><div class="progress-fill" style="width: ${perc}%"></div></div>`}
+            </div>`;
+        if (!isLocked) {
+            div.addEventListener('click', () => { AudioEngine.tap(); requireChannelJoin(() => startCategory(cat)); });
+        }
+        catContainer.appendChild(div);
+    });
+
+    renderDailyChallengeCard();
+    renderChannelPromos();
+    renderSuggestionsSection();
+}
+
+// بخش «پیشنهادات شما 🫂» — جایگزین کارت قبلی «به‌زودی...» است. تمام متن‌ها
+// (عنوان، توضیح، متن الگو، برچسب دکمه‌ها، لینک ایتا) از DB.suggestions
+// خوانده می‌شود (بخش suggestions در data.json)، نه از این فایل — برای
+// تغییرشان فقط data.json را ویرایش کن.
+function renderSuggestionsSection() {
+    const s = DB.suggestions;
+    const section = document.getElementById('suggestions-section');
+    if (!section || !s) return;
+
+    document.getElementById('suggestions-title').textContent = s.title || 'پیشنهادات شما 🫂';
+    document.getElementById('suggestions-intro').textContent = s.intro || '';
+    document.getElementById('suggestions-template').textContent = s.template || '';
+
+    const copyBtn = document.getElementById('btn-copy-suggestion-template');
+    copyBtn.textContent = s.copyButtonText || '📋 کپی متن';
+    copyBtn.onclick = () => copySuggestionTemplate(s.template || '');
+
+    const contactBtn = document.getElementById('btn-send-suggestion');
+    contactBtn.textContent = s.contactButtonText || 'ارسال پیشنهاد';
+    contactBtn.onclick = () => {
+        AudioEngine.tap();
+        openExternalLink(s.contactUrl || 'https://eitaa.com/ferstadeh');
+    };
+}
+
+// کپی متن الگو در کلیپ‌بورد. روش اصلی navigator.clipboard (مرورگرهای مدرن،
+// هم دسکتاپ هم موبایل روی HTTPS)؛ اگر در دسترس نبود (مثلاً وب‌ویوی
+// قدیمی‌تر)، به روش قدیمی execCommand('copy') برمی‌گردیم تا کپی همچنان کار
+// کند. در هر دو حالت با یک toast به کاربر خبر می‌دهیم.
+async function copySuggestionTemplate(text) {
+    AudioEngine.tap();
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+        }
+        showToast('📋', 'متن کپی شد!');
+    } catch (e) {
+        showToast('⚠️', 'کپی نشد، لطفاً متن را دستی کپی کنید.');
+    }
+}
+
+let promoRotateInterval = null;
+let promoResumeTimeout = null;
+// این دو رفرنس فقط برای این نگه داشته می‌شوند که بشود لیسنرهای رندر قبلی را
+// قبل از اضافه‌کردن لیسنر تازه از روی container برداشت (پایین‌تر توضیح کامل).
+let promoScrollHandler = null;
+let promoPointerDownHandler = null;
+
+// صفحه پروفایل: آواتار و نام کاربر را از GameState می‌خواند و کارت جنسیت
+// انتخاب‌شده را هایلایت می‌کند.
+function renderProfile() {
+    document.getElementById('profile-name').textContent = getDisplayName();
+    document.getElementById('profile-current-name').textContent = getDisplayName();
+    const gender = GameState.settings.gender;
+
+    applyAvatarVisual(document.getElementById('profile-avatar'), gender);
+
+    document.querySelectorAll('.gender-option').forEach(el => {
+        el.classList.toggle('selected', el.dataset.gender === gender);
+    });
+}
+
+// نمای کشویی تبلیغ کانال‌ها: از روی آرایه CHANNEL_PROMOS کارت می‌سازد،
+// امکان سوایپ افقی می‌دهد، نقطه‌های پایین را با اسکرول همگام می‌کند و هر ۵
+// ثانیه خودش به کانال بعدی می‌چرخد (با تعامل دستی کاربر موقتاً متوقف می‌شود).
+function renderChannelPromos() {
+    const container = document.getElementById('channel-promo-container');
+    const dotsContainer = document.getElementById('channel-promo-dots');
+    if (!container || !dotsContainer) return;
+
+    // ⚠️ باگ واقعی که اینجا بود: container (بر خلاف کارت‌های داخلش) هر بار
+    // از نو ساخته نمی‌شود، فقط innerHTML آن پاک می‌شود. یعنی این تابع با هر
+    // بار برگشت کاربر به صفحه اصلی (goBackToHome → renderHome) دوباره
+    // addEventListener('scroll')/('pointerdown') را روی همان container قبلی
+    // صدا می‌زد بدون حذف لیسنر قبلی. نتیجه بعد از چند بار رفت‌وبرگشت: تعداد
+    // لیسنرها روی هم انباشته می‌شد (نشتی حافظه) و چند setInterval چرخش خودکار
+    // هم‌زمان اجرا می‌شدند (مصرف بی‌مورد CPU/باتری روی گوشی‌های ضعیف و پرش
+    // نامنظم کارت‌ها). با پاک کردن صریح لیسنرها/تایمرهای قبلی قبل از ساخت
+    // نسخه‌ی تازه، این مشکل کاملاً برطرف می‌شود.
+    clearInterval(promoRotateInterval);
+    clearTimeout(promoResumeTimeout);
+    if (promoScrollHandler) container.removeEventListener('scroll', promoScrollHandler);
+    if (promoPointerDownHandler) container.removeEventListener('pointerdown', promoPointerDownHandler);
+    promoScrollHandler = null;
+    promoPointerDownHandler = null;
+
+    container.innerHTML = '';
+    dotsContainer.innerHTML = '';
+
+    // فقط کارت‌هایی که active:false نشده‌اند رندر می‌شوند؛ همه محاسبات بعدی
+    // (نقطه‌ها، چرخش خودکار) هم باید بر همین لیست فیلترشده باشد، نه آرایه کامل،
+    // وگرنه با مخفی کردن یک تبلیغ تمام‌شده، شمارش‌ها به‌هم می‌ریزد.
+    const visiblePromos = CHANNEL_PROMOS.filter(p => p.active !== false);
+
+    visiblePromos.forEach((promo, index) => {
+        const card = document.createElement('a');
+        card.href = promo.link;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+
+        if (promo.type === 'ad') {
+            // کارت تبلیغ: عمداً ظاهر متفاوتی دارد (رنگ + نوار «Ads») تا کاربر
+            // سریع بفهمد این یک تبلیغه، نه یک کانال خودمان.
+            card.className = 'channel-promo-card promo-type-ad';
+            card.innerHTML = `
+                <span class="ad-ribbon">${promo.badge || 'Ads'}</span>
+                <div class="channel-promo-icon"></div>
+                <div class="channel-promo-info">
+                    <h3 class="channel-promo-title">${promo.name}</h3>
+                    <span class="channel-promo-handle">${promo.handle || ''}</span>
+                    <p class="channel-promo-desc">${promo.desc}</p>
+                </div>
+                <div class="ad-cta-btn">${promo.buttonText || 'مشاهده'}</div>`;
+        } else {
+            card.className = `channel-promo-card theme-${promo.theme || 'default'}`;
+            card.innerHTML = `
+                <div class="channel-promo-icon"></div>
+                <div class="channel-promo-info">
+                    <h3 class="channel-promo-title">${promo.name}</h3>
+                    <span class="channel-promo-handle">${promo.handle}</span>
+                    <p class="channel-promo-desc">${promo.desc}</p>
+                </div>
+                <div class="channel-promo-arrow">‹</div>`;
+        }
+        populateChannelIcon(card.querySelector('.channel-promo-icon'), promo.photoKey, promo.iconType);
+
+        card.addEventListener('click', (e) => {
+            AudioEngine.tap();
+            const wa = window.Eitaa && window.Eitaa.WebApp;
+            if (wa && (typeof wa.openEitaaLink === 'function' || typeof wa.openLink === 'function')) {
+                e.preventDefault();
+                openExternalLink(promo.link);
+            }
+            // در مرورگر معمولی (خارج از اپ ایتا) رفتار پیش‌فرض <a> اجرا می‌شود
+            // و لینک مستقیماً باز می‌شود.
+        });
+        container.appendChild(card);
+
+        const dot = document.createElement('span');
+        dot.className = `channel-promo-dot ${index === 0 ? 'active' : ''}`;
+        dotsContainer.appendChild(dot);
+    });
+
+    // فقط وقتی بیش از یک کارت هست نقطه‌ها را نشان بده
+    dotsContainer.classList.toggle('hidden', visiblePromos.length <= 1);
+
+    if (visiblePromos.length > 1) {
+        promoScrollHandler = () => {
+            const cardWidth = container.firstElementChild ? container.firstElementChild.offsetWidth + 12 : 1;
+            const activeIndex = Math.round(Math.abs(container.scrollLeft) / cardWidth);
+            dotsContainer.querySelectorAll('.channel-promo-dot').forEach((dot, i) => {
+                dot.classList.toggle('active', i === activeIndex);
+            });
+        };
+        container.addEventListener('scroll', promoScrollHandler);
+
+        // چرخش خودکار هر ۴ ثانیه. از scrollIntoView به‌جای دستکاری مستقیم
+        // scrollLeft استفاده می‌کنیم چون علامت (مثبت/منفی) scrollLeft در حالت
+        // RTL بین مرورگرها فرق می‌کند و scrollIntoView این مشکل را ندارد.
+        let rotateIndex = 0;
+        const rotateToNext = () => {
+            rotateIndex = (rotateIndex + 1) % visiblePromos.length;
+            const target = container.children[rotateIndex];
+            if (target) target.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+        };
+        promoRotateInterval = setInterval(rotateToNext, PROMO_ROTATE_INTERVAL_MS);
+
+        // با تعامل دستی کاربر، چرخش خودکار موقتاً متوقف و بعد از چند ثانیه از سر گرفته می‌شود
+        promoPointerDownHandler = () => {
+            clearInterval(promoRotateInterval);
+            clearTimeout(promoResumeTimeout);
+            promoResumeTimeout = setTimeout(() => {
+                promoRotateInterval = setInterval(rotateToNext, PROMO_ROTATE_INTERVAL_MS);
+            }, 6000);
+        };
+        container.addEventListener('pointerdown', promoPointerDownHandler);
+    }
+}
+
+
+
+
+/* =========================================
+   5. Game Logic Core
+========================================= */
+
+// --- سوال روزانه ---
+// کلید امروز بر اساس ساعت محلی گوشی ساخته می‌شود، پس دقیقاً «بعد از نیمه‌شب
+// محلی» عوض می‌شود، نه یک منطقه زمانی ثابت جهانی.
+function getTodayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function hashStringToInt(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) { hash = (hash * 31 + str.charCodeAt(i)) >>> 0; }
+    return hash;
+}
+
+// یک مرحله را بر اساس تاریخ امروز، به‌صورت قطعی از بین همه مراحل همه دسته‌ها
+// انتخاب می‌کند. «قطعی» یعنی همه کاربران در یک روز، سوال یکسانی می‌بینند و
+// این سوال فقط با عوض شدن تاریخ (نیمه‌شب) تغییر می‌کند.
+//
+// نکته مهم درباره «تکرار نشدن»: قبلاً اینجا فقط hash(تاریخ) % تعداد سوال‌ها
+// حساب می‌شد؛ این روش با اینکه هر روز یک سوال «تصادفی‌نما» می‌داد، از نظر
+// آماری (masalan مسئله‌ی تولد/Birthday Paradox) احتمال زیادی داشت که خیلی
+// زودتر از تمام‌شدن کل بانک سوال‌ها، یک سوال تکراری بیفتد (با ۱۵۰ سوال،
+// به‌طور میانگین هر ~۱۲-۱۳ روز یک برخورد رخ می‌داد).
+// روش جدید: یک «چیدمان» (permutation) ثابت و قطعی از همه‌ی سوال‌ها می‌سازیم
+// (Fisher-Yates با یک seed ثابت، پس چیدمان برای همه کاربران یکسان است) و هر
+// روز فقط یک قدم روی همین چیدمان جلو می‌رویم. این یعنی تا وقتی همه‌ی سوال‌ها
+// یک‌بار دیده نشده باشند، هیچ سوالی دوباره تکرار نمی‌شود؛ فقط بعد از عبور از
+// کل بانک سوال (الان ۶۵×۳=۱۹۵ سوال یعنی حدود ۶.5 ماه)، چیدمان دوباره از اول
+// شروع می‌شود. برای طولانی‌تر کردن این چرخه، کافیست مرحله‌ی بیشتری به
+// data.json اضافه کنی؛ خودکار وارد چرخه می‌شوند.
+function seededRandom(seed) {
+    let s = seed % 2147483647;
+    if (s <= 0) s += 2147483646;
+    return function () {
+        s = (s * 16807) % 2147483647;
+        return (s - 1) / 2147483646;
+    };
+}
+
+const DAILY_PERMUTATION_SEED = 20240101; // ثابت نگه‌دار؛ عوض کردنش چیدمان را کلاً بهم می‌ریزد
+let dailyPermutationCache = null;
+let dailyPermutationForLength = 0;
+
+function getDailyPermutation(length) {
+    if (dailyPermutationCache && dailyPermutationForLength === length) return dailyPermutationCache;
+    const arr = Array.from({ length }, (_, i) => i);
+    const rand = seededRandom(DAILY_PERMUTATION_SEED);
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    dailyPermutationCache = arr;
+    dailyPermutationForLength = length;
+    return arr;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+// عدد ثابتی که شمارش «روز» را همیشه از یک نقطه‌ی مشخص در گذشته شروع می‌کند
+// (تا مستقل از تایم‌زون سرور/کاربر، یک عدد صحیح و پایدار برای «امروز» بدهد).
+const DAILY_EPOCH = Date.UTC(2024, 0, 1);
+
+function getDailyChallengeLevel() {
+    const allLevels = [];
+    DB.categories.forEach(cat => {
+        cat.levels.forEach(lvl => allLevels.push({ ...lvl, categoryId: cat.id, categoryName: cat.name, categoryIcon: cat.icon }));
+    });
+    if (allLevels.length === 0) return null;
+    const daysSinceEpoch = Math.floor((Date.now() - DAILY_EPOCH) / DAY_MS);
+    const permutation = getDailyPermutation(allLevels.length);
+    const cyclePosition = ((daysSinceEpoch % permutation.length) + permutation.length) % permutation.length;
+    const idx = permutation[cyclePosition];
+    return allLevels[idx];
+}
+
+function renderDailyChallengeCard() {
+    const card = document.getElementById('daily-challenge-card');
+    if (!card) return;
+    const doneToday = GameState.dailyChallenge.lastCompletedDate === getTodayKey();
+    card.classList.toggle('done', doneToday);
+    document.getElementById('daily-badge').textContent = doneToday ? '✅ انجام‌شد' : '🔥 جدید';
+    document.getElementById('daily-status-text').textContent = doneToday
+        ? 'امروز حلش کردی! نیمه‌شب یه چالش تازه میاد 🌙'
+        : 'یه معمای ایموجی مخصوص امروز، هر روز عوض می‌شه';
+}
+
+// --- عضویت اجباری در کانال قبل از بازی (چرخشی هفتگی) ---
+// action همان کاری است که کاربر می‌خواست انجام دهد (باز کردن یک دسته یا
+// چالش روزانه). فقط کانال «فعال همین هفته» چک می‌شود، نه همه‌ی کانال‌ها با
+// هم. عضویت هفته‌ی قبل، برای هفته‌ی جدید کافی نیست چون channelId عوض شده.
+let pendingJoinAction = null;
+function requireChannelJoin(action) {
+    const info = getCurrentRotationInfo();
+    if (!info) { action(); return; } // اگر هیچ کانال فعالی نبود (همه غیرفعال)، چیزی را بلاک نکن
+
+    const alreadyConfirmedThisWeek =
+        GameState.joinGate.confirmedChannelId === info.channel.id &&
+        GameState.joinGate.confirmedWeekNumber === info.weekNumber;
+
+    if (alreadyConfirmedThisWeek) { action(); return; }
+
+    pendingJoinAction = action;
+    renderJoinGateModal(info);
+    document.getElementById('modal-join-gate').classList.remove('hidden');
+}
+
+// محتوای پنجره را بر اساس کانالِ فعالِ همین هفته می‌سازد. متن معرفیِ هر
+// کانال دیگر از JS نمی‌آید — مستقیماً در index.html نوشته شده (سه
+// <div class="join-gate-channel-block" data-channel-id="..."> داخل modal-join-gate)؛
+// این تابع فقط همان‌یکی که با کانال فعال این هفته می‌خواند را نشان
+// می‌دهد و بقیه را مخفی می‌کند. فقط ردیف پایین (نام/آیکون/دکمه‌ی عضویت)
+// همچنان پویاست، چون لینک آن هر هفته عوض می‌شود.
+function renderJoinGateModal(info) {
+    document.querySelectorAll('.join-gate-channel-block').forEach(el => {
+        el.classList.toggle('hidden', el.dataset.channelId !== info.channel.id);
+    });
+
+    const container = document.getElementById('join-gate-channels');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const row = document.createElement('div');
+    row.className = 'join-gate-channel-row';
+    row.innerHTML = `
+        <span class="jg-channel-name">${info.channel.icon} ${info.channel.name}</span>
+        <button type="button" class="ios-btn primary-btn jg-join-btn">عضویت</button>`;
+    row.querySelector('.jg-join-btn').addEventListener('click', () => {
+        AudioEngine.tap();
+        openExternalLink(getChannelUrl(info.channel));
+    });
+    container.appendChild(row);
+}
+
+function startDailyChallenge() {
+    AudioEngine.tap();
+    if (GameState.dailyChallenge.lastCompletedDate === getTodayKey()) {
+        showToast('🌙', 'چالش امروز رو قبلاً حل کردی! بعد از نیمه‌شب یه چالش جدید میاد.');
+        return;
+    }
+    const lvl = getDailyChallengeLevel();
+    if (!lvl) return;
+
+    GameState.isDailyChallenge = true;
+    GameState.activeCategory = { id: 'daily', name: '🔥 چالش روزانه', icon: '🔥', levels: [lvl] };
+    GameState.activeLevelIndex = 0;
+    document.getElementById('game-category-title').textContent = '🔥 چالش روزانه';
+    document.getElementById('category-notice').classList.add('hidden');
+
+    // نمایش دسته‌بندی (نوع) سوال روزانه، مثلاً «🎭 ضرب‌المثل‌ها»
+    const badgeEl = document.getElementById('daily-type-badge');
+    if (badgeEl) {
+        badgeEl.textContent = `${lvl.categoryIcon || ''} ${lvl.categoryName || ''}`.trim();
+        badgeEl.classList.remove('hidden');
+    }
+
+    showScreen('screen-game');
+    renderLevel();
+
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+        window.Eitaa.WebApp.BackButton.show();
+    }
+}
+
+// --- سطح سختی هر مرحله ---
+// اگر خود مرحله در data.json مقدار "difficulty" داشته باشد از همان استفاده
+// می‌شود (برای سفارشی‌سازی دستی در آینده)، وگرنه بر اساس تعداد حروف پاسخ
+// به‌صورت خودکار تخمین زده می‌شود؛ راهی سبک برای سطح‌بندی ۱۵۰+ مرحله فعلی
+// بدون نیاز به ویرایش دستی تک‌تک آن‌ها در data.json.
+const DIFFICULTY_LABELS = {
+    easy: { text: 'آسان', className: 'diff-easy' },
+    medium: { text: 'متوسط', className: 'diff-medium' },
+    hard: { text: 'سخت', className: 'diff-hard' }
+};
+function computeDifficulty(levelData, isWordMode) {
+    if (levelData.difficulty && DIFFICULTY_LABELS[levelData.difficulty]) return levelData.difficulty;
+    if (isWordMode) {
+        // برای دسته‌های کلمه‌به‌کلمه (مثل ضرب‌المثل)، سختی واقعی که کاربر حس
+        // می‌کند به تعداد کلماتی که باید بچیند بستگی دارد، نه تعداد کل حروف
+        // جمله؛ یک ضرب‌المثل ۶ کلمه‌ای حتی اگر حروفش زیاد باشد، سخت‌تر از یک
+        // جمله ۹ کلمه‌ای با کلمات کوتاه نیست.
+        const wordCount = levelData.answer.trim().split(/\s+/).length;
+        if (wordCount <= 3) return 'easy';
+        if (wordCount <= 6) return 'medium';
+        return 'hard';
+    }
+    const len = levelData.answer.replace(/\s/g, '').length;
+    if (len <= 6) return 'easy';
+    if (len <= 12) return 'medium';
+    return 'hard';
+}
+
+function startCategory(category) {
+    GameState.isDailyChallenge = false;
+    GameState.activeCategory = category;
+    document.getElementById('game-category-title').textContent = category.name;
+    document.getElementById('daily-type-badge').classList.add('hidden');
+    
+    let completedArr = GameState.progress[category.id] || [];
+    let nextIndex = 0;
+    for(let i=0; i < category.levels.length; i++) {
+        if(!completedArr.includes(i)) { nextIndex = i; break; }
+    }
+    GameState.activeLevelIndex = nextIndex;
+    
+    // نمایش هشدار برای بخش‌هایی که ماهیت محاوره‌ای/عامیانه دارند
+    const noticeEl = document.getElementById('category-notice');
+    if (category.id === 'proverbs' || category.id === 'idioms') {
+        noticeEl.innerHTML = '💡 <strong>توجه:</strong> برخی از ' + (category.id === 'idioms' ? 'اصطلاحات' : 'ضرب‌المثل‌ها') + ' به زبان محاوره و عامیانه نوشته شده‌اند.';
+        noticeEl.classList.remove('hidden');
+    } else {
+        noticeEl.classList.add('hidden');
+    }
+
+    showScreen('screen-game');
+    renderLevel();
+
+    // فعال‌سازی دکمه بازگشت سیستمی ایتا
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+        window.Eitaa.WebApp.BackButton.show();
+    }
+}
+
+function renderLevel() {
+    const cat = GameState.activeCategory;
+    if (GameState.activeLevelIndex >= cat.levels.length) GameState.activeLevelIndex = 0;
+
+    const levelData = cat.levels[GameState.activeLevelIndex];
+    const answer = levelData.answer.replace(/ي/g, "ی").replace(/ك/g, "ک").trim();
+    
+    document.getElementById('ui-level').textContent = GameState.activeLevelIndex + 1;
+    document.getElementById('game-score').textContent = GameState.globalScore;
+
+    const isWordMode = cat.id === 'proverbs';
+
+    const diffKey = computeDifficulty(levelData, isWordMode);
+    const diffInfo = DIFFICULTY_LABELS[diffKey];
+    const diffEl = document.getElementById('ui-difficulty');
+    diffEl.textContent = diffInfo.text;
+    diffEl.className = `difficulty-badge ${diffInfo.className}`;
+
+    renderAppleEmojis(document.getElementById('emoji-inner-container'), levelData.emoji);
+
+    const answerArea = document.getElementById('answer-slots');
+    answerArea.innerHTML = '';
+    GameState.slots = [];
+    let slotId = 0;
+
+    // فقط دسته‌ی ضرب‌المثل‌ها به‌جای حرف، کلمه‌به‌کلمه ساخته می‌شود؛ چون
+    // ضرب‌المثل‌ها جمله‌های بلندی هستند و چیدن تک‌تک حروفشان برای کاربر
+    // خسته‌کننده بود. بقیه دسته‌ها (فیلم/کشور) دقیقاً مثل قبل حرف‌به‌حرف می‌مانند.
+    let requiredUnits = [];
+
+    if (isWordMode) {
+        answer.split(' ').forEach(word => {
+            const slotObj = { id: slotId++, char: word, filledWith: '', keyId: null, locked: false, isWord: true };
+            GameState.slots.push(slotObj);
+            requiredUnits.push(word);
+
+            const slotEl = document.createElement('div');
+            slotEl.className = 'slot word-slot';
+            slotEl.id = `slot-${slotObj.id}`;
+            slotEl.addEventListener('click', () => handleSlotClick(slotObj.id));
+            answerArea.appendChild(slotEl);
+        });
+    } else {
+        answer.split(' ').forEach(word => {
+            const group = document.createElement('div');
+            group.className = 'word-group';
+            for (let char of word) {
+                // نیم‌فاصله (ZWNJ) یک کاراکتر نامرئی است که فقط برای چسباندن
+                // بصری دو تکه‌ی یک کلمه‌ی مرکب استفاده می‌شود (مثل «پاچه‌خواری»)؛
+                // نباید خودش یک خانه/کلید قابل‌حدس‌زدن باشد.
+                if (char === '\u200c') continue;
+                const slotObj = { id: slotId++, char: char, filledWith: '', keyId: null, locked: false, isWord: false };
+                GameState.slots.push(slotObj);
+                requiredUnits.push(char);
+
+                const slotEl = document.createElement('div');
+                slotEl.className = 'slot';
+                slotEl.id = `slot-${slotObj.id}`;
+                slotEl.addEventListener('click', () => handleSlotClick(slotObj.id));
+                group.appendChild(slotEl);
+            }
+            answerArea.appendChild(group);
+        });
+    }
+
+    let keyUnits = [...requiredUnits];
+    if (isWordMode) {
+        // چند کلمه‌ی مزاحم (اشتباه ولی باورپذیر) از دیتابیس کلمات data.json اضافه
+        // می‌شود تا انتخاب کلمه‌ی درست کمی چالش داشته باشد، نه اینکه دقیقاً همان
+        // تعداد کلمه‌ی درست روی کیبورد باشد.
+        const bank = (DB.wordBank || []).filter(w => !requiredUnits.includes(w));
+        const shuffledBank = [...bank].sort(() => Math.random() - 0.5);
+        const decoyCount = Math.min(shuffledBank.length, Math.max(4, Math.min(8, requiredUnits.length + 3)));
+        keyUnits.push(...shuffledBank.slice(0, decoyCount));
+    } else {
+        while (keyUnits.length < Math.max(24, requiredUnits.length + 6)) {
+            keyUnits.push(PERSIAN_ALPHABET[Math.floor(Math.random() * PERSIAN_ALPHABET.length)]);
+        }
+    }
+    keyUnits.sort(() => Math.random() - 0.5);
+
+    GameState.keys = keyUnits.map((c, i) => ({ id: i, char: c, used: false, isWord: isWordMode }));
+    const kbArea = document.getElementById('keyboard');
+    kbArea.innerHTML = '';
+    
+    GameState.keys.forEach(k => {
+        const btn = document.createElement('button');
+        btn.className = `key pop-in ${k.isWord ? 'word-key' : ''}`;
+        btn.id = `key-${k.id}`;
+        btn.textContent = k.char;
+        btn.addEventListener('click', () => handleKeyClick(k.id));
+        kbArea.appendChild(btn);
+    });
+
+    GameState.startTime = Date.now();
+    updateGameUI();
+}
+
+function updateGameUI() {
+    document.getElementById('game-score').textContent = GameState.globalScore;
+    GameState.slots.forEach(s => {
+        const el = document.getElementById(`slot-${s.id}`);
+        if(el) {
+            el.textContent = s.filledWith;
+            el.className = `slot ${s.isWord ? 'word-slot' : ''} ${s.filledWith ? 'filled' : ''} ${s.locked ? 'locked' : ''}`;
+        }
+    });
+    GameState.keys.forEach(k => {
+        const el = document.getElementById(`key-${k.id}`);
+        if(el) el.className = `key ${k.isWord ? 'word-key' : ''} ${k.used ? 'used' : ''}`;
+    });
+}
+
+function handleKeyClick(keyId) {
+    const key = GameState.keys.find(k => k.id === keyId);
+    if (!key || key.used) return;
+    const emptySlot = GameState.slots.find(s => s.filledWith === '');
+    if (!emptySlot) return;
+
+    AudioEngine.tap();
+    emptySlot.filledWith = key.char;
+    emptySlot.keyId = key.id;
+    key.used = true;
+    updateGameUI();
+    checkWin();
+}
+
+function handleSlotClick(slotId) {
+    const slot = GameState.slots.find(s => s.id === slotId);
+    if (!slot || !slot.filledWith || slot.locked) return;
+    
+    AudioEngine.pop();
+    const key = GameState.keys.find(k => k.id === slot.keyId);
+    if (key) key.used = false;
+    slot.filledWith = '';
+    slot.keyId = null;
+    updateGameUI();
+}
+
+function useHint() {
+    if (GameState.globalScore < HINT_COST) { showToast('🪙', 'امتیاز کافی نیست!'); return; }
+    const candidates = GameState.slots.filter(s => !s.locked && s.filledWith !== s.char);
+    if (candidates.length === 0) return;
+    
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    if (target.filledWith !== '') {
+        const k = GameState.keys.find(x => x.id === target.keyId);
+        if(k) k.used = false;
+        target.filledWith = '';
+    }
+
+    let validKeyId = GameState.keys.findIndex(k => k.char === target.char && !k.used);
+    if (validKeyId === -1) {
+        const wrongSlot = GameState.slots.find(s => !s.locked && s.filledWith === target.char);
+        if(wrongSlot) {
+            validKeyId = wrongSlot.keyId;
+            wrongSlot.filledWith = '';
+            const freed = GameState.keys.find(k => k.id === validKeyId);
+            if(freed) freed.used = false;
+        }
+    }
+
+    if (validKeyId !== -1) {
+        GameState.globalScore -= HINT_COST;
+        target.filledWith = target.char;
+        target.keyId = validKeyId;
+        target.locked = true;
+        GameState.keys.find(k => k.id === validKeyId).used = true;
+        AudioEngine.pop();
+        updateGameUI();
+        StorageManager.save();
+        checkWin();
+    }
+}
+
+function checkWin() {
+    if (GameState.slots.some(s => s.filledWith === '')) return;
+    const isCorrect = GameState.slots.every(s => s.filledWith === s.char);
+    
+    if (isCorrect) {
+        AudioEngine.success();
+        let base;
+
+        if (GameState.isDailyChallenge) {
+            base = DAILY_BASE_SCORE;
+            GameState.globalScore += base;
+            GameState.totalEarned += base;
+            const todayKey = getTodayKey();
+            if (GameState.dailyChallenge.lastCompletedDate !== todayKey) {
+                GameState.dailyChallenge.completedCount = (GameState.dailyChallenge.completedCount || 0) + 1;
+            }
+            GameState.dailyChallenge.lastCompletedDate = todayKey;
+        } else {
+            const catId = GameState.activeCategory.id;
+            base = CATEGORY_SCORES[catId] ?? BASE_SCORE;
+            GameState.globalScore += base;
+            GameState.totalEarned += base;
+            if (!GameState.progress[catId]) GameState.progress[catId] = [];
+            if (!GameState.progress[catId].includes(GameState.activeLevelIndex)) {
+                GameState.progress[catId].push(GameState.activeLevelIndex);
+            }
+        }
+        
+        checkMedals();
+        StorageManager.save();
+
+        document.getElementById('reward-base-score').textContent = `+${base}`;
+        
+        document.getElementById('modal-success').classList.remove('hidden');
+    } else {
+        AudioEngine.error();
+        const area = document.getElementById('answer-slots');
+        area.classList.remove('shake');
+        void area.offsetWidth;
+        area.classList.add('shake');
+    }
+}
+
+function showToast(icon, text, duration = 3500) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<span style="font-size:1.5rem">${icon}</span> <span>${text}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), duration);
+}
+
+function checkMedals() {
+    MEDALS_DB.forEach(medal => {
+        if (!GameState.unlockedMedals.includes(medal.id) && medal.check(GameState)) {
+            GameState.unlockedMedals.push(medal.id);
+            showToast(medal.icon, `مدال جدید: ${medal.name}`);
+            AudioEngine.medal();
+        }
+    });
+}
+
+/* =========================================
+   6. Bootstrapping
+========================================= */
+function setupEvents() {
+    document.getElementById('btn-back-home').addEventListener('click', goBackToHome);
+    
+    // اتصال دکمه بازگشت سخت‌افزاری/سیستمی ایتا به برنامه ما
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+        window.Eitaa.WebApp.BackButton.onClick(goBackToHome);
+    }
+
+    document.getElementById('btn-next-level').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-success').classList.add('hidden');
+        if (GameState.isDailyChallenge) {
+            GameState.isDailyChallenge = false;
+            goBackToHome();
+            return;
+        }
+        GameState.activeLevelIndex++;
+        renderLevel();
+    });
+    
+    document.getElementById('btn-hint').addEventListener('click', useHint);
+
+    document.getElementById('daily-challenge-card').addEventListener('click', () => requireChannelJoin(startDailyChallenge));
+
+    document.getElementById('btn-confirm-joined').addEventListener('click', () => {
+        AudioEngine.tap();
+        // نکته فنی مهم: از داخل مرورگر (بدون سرور و بدون Bot API رسمی ایتا برای
+        // احراز عضویت) امکان بررسی واقعی و قطعی عضویت کاربر در کانال وجود ندارد.
+        // به همین دلیل، به‌جای شبیه‌سازی یک "تأیید" دروغین، این دکمه صادقانه به
+        // عنوان «خودم عضو شدم» عمل می‌کند (self-report). فقط برای کانال و
+        // هفته‌ی فعلیِ چرخش ثبت می‌شود؛ با شروع هفته‌ی بعد و عوض شدن کانال،
+        // این تأیید خودکار باطل می‌شود و کاربر باید دوباره تأیید کند.
+        const info = getCurrentRotationInfo();
+        if (info) {
+            GameState.joinGate.confirmedChannelId = info.channel.id;
+            GameState.joinGate.confirmedWeekNumber = info.weekNumber;
+            StorageManager.save();
+        }
+        document.getElementById('modal-join-gate').classList.add('hidden');
+        if (pendingJoinAction) {
+            const action = pendingJoinAction;
+            pendingJoinAction = null;
+            action();
+        }
+    });
+
+    document.getElementById('btn-open-settings').addEventListener('click', () => { AudioEngine.tap(); document.getElementById('modal-settings').classList.remove('hidden'); });
+    document.getElementById('btn-open-rewards').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-settings').classList.add('hidden');
+        renderRewardsModal();
+        document.getElementById('modal-rewards').classList.remove('hidden');
+    });
+    document.getElementById('btn-claim-daily-reward').addEventListener('click', claimDailyReward);
+    document.getElementById('btn-open-changelog').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-settings').classList.add('hidden');
+        renderChangelog(true);
+        document.getElementById('modal-changelog').classList.remove('hidden');
+    });
+    document.querySelectorAll('.close-btn').forEach(b => b.addEventListener('click', (e) => { document.getElementById(e.target.dataset.close).classList.add('hidden'); }));
+    document.getElementById('toggle-theme').addEventListener('change', e => { GameState.settings.darkMode = e.target.checked; applyTheme(); StorageManager.save(); });
+    document.getElementById('toggle-sound').addEventListener('change', e => { GameState.settings.sound = e.target.checked; StorageManager.save(); });
+
+    // صفحه پروفایل: با لمس آواتار/اسم کاربر در هدر باز می‌شود
+    document.getElementById('user-info-trigger').addEventListener('click', () => {
+        AudioEngine.tap();
+        renderProfile();
+        showScreen('screen-profile');
+        if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+            window.Eitaa.WebApp.BackButton.show();
+        }
+    });
+    document.getElementById('btn-back-profile').addEventListener('click', goBackToHome);
+    document.querySelectorAll('.gender-option').forEach(el => {
+        el.addEventListener('click', () => {
+            AudioEngine.tap();
+            GameState.settings.gender = el.dataset.gender;
+            StorageManager.save();
+            renderProfile();
+            renderHome();
+        });
+    });
+
+    // دکمه‌ی «انتخاب عکس پروفایل»: مجموعه‌ی عکس‌های آماده رو داخل یک پنجره نشون می‌ده
+    const avatarPhotoBtn = document.getElementById('btn-choose-avatar-photo');
+    if (avatarPhotoBtn) {
+        avatarPhotoBtn.addEventListener('click', () => {
+            AudioEngine.tap();
+            renderAvatarPicker();
+            document.getElementById('modal-avatar-picker').classList.remove('hidden');
+        });
+    }
+
+    // --- تغییر نام نمایشی ---
+    document.getElementById('btn-edit-name').addEventListener('click', () => {
+        AudioEngine.tap();
+        const input = document.getElementById('edit-name-input');
+        input.value = getDisplayName();
+        document.getElementById('modal-edit-name').classList.remove('hidden');
+        input.focus();
+    });
+    document.getElementById('btn-save-name').addEventListener('click', () => {
+        AudioEngine.tap();
+        const input = document.getElementById('edit-name-input');
+        const clean = sanitizeDisplayName(input.value);
+        if (!clean) {
+            showToast('⚠️', 'نام نمی‌تواند خالی باشد.');
+            return;
+        }
+        GameState.settings.displayName = clean;
+        StorageManager.save();
+        document.getElementById('modal-edit-name').classList.add('hidden');
+        renderProfile();
+        renderHome();
+        showToast('✅', 'نام شما ذخیره شد.');
+    });
+    document.getElementById('btn-cancel-name').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-edit-name').classList.add('hidden');
+    });
+}
+
+/* =========================================
+   7. نسخه‌ی جدید برنامک (Changelog)
+========================================= */
+// showAll=true یعنی همه نسخه‌ها (برای ردیف «نسخه‌ی جدید برنامک» در تنظیمات)،
+// showAll=false یعنی فقط نسخه‌هایی که کاربر هنوز ندیده (برای پاپ‌آپ خودکار).
+// نکته: عمداً فقط لیست «added» (امکانات جدید) نمایش داده می‌شود؛ باگ‌فیکس‌ها و
+// تغییرات داخلی برای کاربر عادی جذابیتی ندارد و در CHANGELOG_DB می‌مانند فقط
+// برای مستندسازی داخلی خودمان.
+function renderChangelog(showAll) {
+    const body = document.getElementById('changelog-body');
+    if (!body) return;
+    const seen = localStorage.getItem('lastSeenVersion');
+    let entries = CHANGELOG_DB;
+    if (!showAll && seen) {
+        const seenIdx = CHANGELOG_DB.findIndex(e => e.version === seen);
+        entries = seenIdx === -1 ? CHANGELOG_DB.slice(0, 1) : CHANGELOG_DB.slice(0, seenIdx);
+    }
+    if (entries.length === 0) entries = CHANGELOG_DB.slice(0, 1);
+
+    body.innerHTML = entries.map(entry => `
+        <div class="changelog-entry">
+            <div class="changelog-version">نسخه ${entry.version}</div>
+            ${entry.added?.length ? `
+                <ul class="changelog-list">${entry.added.map(t => `<li>✨ ${t}</li>`).join('')}</ul>` : ''}
+        </div>`).join('');
+}
+
+function checkForUpdates() {
+    const seen = localStorage.getItem('lastSeenVersion');
+    localStorage.setItem('lastSeenVersion', APP_VERSION);
+    // بار اول نصب (seen خالی) پاپ‌آپ نشون داده نمی‌شود؛ فقط وقتی نسخه قبلی
+    // دیده شده و با نسخه فعلی فرق دارد (یعنی واقعاً یک آپدیت اتفاق افتاده).
+    if (seen && seen !== APP_VERSION) {
+        renderChangelog(false);
+        document.getElementById('modal-changelog').classList.remove('hidden');
+    }
+}
+
+/* =========================================
+   8. امتیاز و پاداش (Daily Reward + Channel Rewards)
+========================================= */
+// همه‌ی کارت‌های پاداش کانالی از فایل جداگانه‌ی reward-channels.js خوانده
+// می‌شود (نه اینجا)؛ برای اضافه/ویرایش یک کانال پاداش به آن فایل برو.
+// fallback زیر فقط برای وقتی است که آن فایل به هر دلیلی لود نشده باشد.
+const REWARD_CONFIG = (typeof window !== 'undefined' && window.REWARD_SETTINGS)
+    ? window.REWARD_SETTINGS
+    : { channels: [], rotatingSlot: null };
+
+const REWARD_DAYS_FA = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+const DAILY_REWARD_MIN = 10;
+const DAILY_REWARD_MAX = 85;
+
+// همون فرمت YYYY-MM-DD که getTodayKey هم استفاده می‌کند (بر مبنای ساعت محلی دستگاه)
+function getDateKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// شروع هفته‌ی جاری (شنبه) برای تاریخ داده‌شده. getDay() در جاوااسکریپت
+// یکشنبه=۰ ... شنبه=۶ برمی‌گرداند؛ فرمول زیر فاصله‌ی «امروز» تا آخرین شنبه را می‌دهد.
+function getWeekStartDate(d) {
+    const daysSinceSaturday = (d.getDay() + 1) % 7;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - daysSinceSaturday);
+}
+
+// ⚠️ محدودیت واقعی (مثل بقیه‌ی این پروژه‌ی کاملاً استاتیک، نگاه کن به
+// توضیح گیت عضویت اجباری بالاتر همین فایل): تشخیص «امروز چه روزیه» فقط از
+// روی ساعت خود گوشی ممکن است، نه یک ساعت سرور واقعی (چون این سایت اصلاً
+// بک‌اند ندارد). اگر امنیت ۱۰۰٪ در برابر دستکاری ساعت لازم باشد، این بخش
+// باید به یک سرویس بک‌اند واقعی (که ساعت را خودش تعیین کند، نه کلاینت) وصل
+// شود. تا آن زمان، محافظ زیر ساده‌ترین و رایج‌ترین روش تقلب — عقب بردن
+// ساعت گوشی برای گرفتن دوباره‌ی جایزه‌ی همون روز/هفته — را می‌گیرد:
+// «هفته‌ی ثبت‌شده» در GameState هرگز به عقب برنمی‌گردد، فقط می‌تواند جلوتر
+// برود. یعنی اگر GameState.rewards.daily.weekStartKey از هفته‌ی محاسبه‌شده‌ی
+// فعلی جلوتر یا برابر باشد، هیچ چیزی ریست نمی‌شود و روزهای قبلاً گرفته‌شده
+// (claimedDaysThisWeek) دست‌نخورده می‌مانند.
+function syncDailyRewardWeek() {
+    const now = new Date();
+    const todayKey = getDateKey(now);
+    const weekStartKey = getDateKey(getWeekStartDate(now));
+    const daily = GameState.rewards.daily;
+
+    if (!daily.weekStartKey || weekStartKey > daily.weekStartKey) {
+        daily.weekStartKey = weekStartKey;
+        daily.claimedDaysThisWeek = [];
+        StorageManager.save();
+    }
+    return { now, todayKey, weekStartKey, isCurrentWeek: weekStartKey === daily.weekStartKey };
+}
+
+function canClaimDailyRewardToday() {
+    const { todayKey, isCurrentWeek } = syncDailyRewardWeek();
+    const daily = GameState.rewards.daily;
+    // اگر ساعت دستگاه از هفته‌ی ثبت‌شده عقب‌تر باشد (یعنی کسی ساعت را عقب
+    // برده)، هفته‌ی ثبت‌شده معتبر باقی می‌ماند و چیزی قابل دریافت نیست.
+    if (!isCurrentWeek) return false;
+    if (daily.claimedDaysThisWeek.includes(todayKey)) return false;
+    if (daily.lastGrantedDateKey && todayKey <= daily.lastGrantedDateKey) return false;
+    return true;
+}
+
+function claimDailyReward() {
+    if (!canClaimDailyRewardToday()) { showToast('⏳', 'امتیاز روزانه‌ی امروز رو قبلاً گرفتی.'); return; }
+    AudioEngine.tap();
+    const { todayKey } = syncDailyRewardWeek();
+    const amount = Math.floor(Math.random() * (DAILY_REWARD_MAX - DAILY_REWARD_MIN + 1)) + DAILY_REWARD_MIN;
+    GameState.globalScore += amount;
+    GameState.totalEarned += amount;
+    GameState.rewards.daily.claimedDaysThisWeek.push(todayKey);
+    GameState.rewards.daily.lastGrantedDateKey = todayKey;
+    checkMedals();
+    StorageManager.save();
+    AudioEngine.success();
+    renderHome();
+    renderDailyRewardSection();
+    showToast('🎁', `${amount} سکه امتیاز روزانه‌ت رو گرفتی! مبارکه 🎊`);
+}
+
+function renderDailyRewardSection() {
+    const { todayKey, weekStartKey } = syncDailyRewardWeek();
+    const daily = GameState.rewards.daily;
+
+    const pipsContainer = document.getElementById('daily-reward-pips');
+    if (pipsContainer) {
+        pipsContainer.innerHTML = '';
+        const [wy, wm, wd] = weekStartKey.split('-').map(Number);
+        for (let i = 0; i < 7; i++) {
+            const dayKey = getDateKey(new Date(wy, wm - 1, wd + i));
+            const claimed = daily.claimedDaysThisWeek.includes(dayKey);
+            const isToday = dayKey === todayKey;
+            const pip = document.createElement('div');
+            pip.className = `daily-pip ${claimed ? 'claimed' : ''} ${isToday ? 'today' : ''}`;
+            pip.innerHTML = `<div class="daily-pip-dot">${claimed ? '✓' : i + 1}</div><span class="daily-pip-label">${REWARD_DAYS_FA[i]}</span>`;
+            pipsContainer.appendChild(pip);
+        }
+    }
+
+    const canClaim = canClaimDailyRewardToday();
+    const btn = document.getElementById('btn-claim-daily-reward');
+    if (btn) {
+        btn.disabled = !canClaim;
+        btn.textContent = canClaim ? '🎁 دریافت امتیاز امروز' : '✅ امروز رو گرفتی، فردا دوباره بیا';
+    }
+}
+
+// --- پاداش عضویت در کانال‌ها ---
+// دقیقاً مثل گیت عضویت اجباری بالاتر همین فایل: از فرانت (بدون سرور و بدون
+// Bot API رسمی ایتا) امکان بررسی واقعی و قطعی عضویت وجود ندارد. اگر بعداً
+// یک بک‌اند/بات با دسترسی ادمین به این کانال‌ها راه‌اندازی شد، دقیقاً همینجا
+// (تابع claimRewardChannel، قبل از دادن پاداش) باید یک فراخوانی به API واقعی
+// عضویت (مثلاً getChatMember) اضافه شود. تا آن زمان، از self-report صادقانه
+// استفاده می‌شود: فقط بعد از اینکه کاربر واقعاً به کانال فرستاده شده و به
+// رازک برگشته (نه بلافاصله بعد از کلیک روی «عضویت»)، دکمه به «دریافت» تغییر
+// می‌کند؛ خود گرفتن پاداش با کلیک جدا و آگاهانه روی «دریافت» انجام می‌شود.
+const rewardChannelsReturned = new Set(); // فقط برای همین نشست؛ دائمی ذخیره نمی‌شود
+let pendingRewardCardKey = null;
+
+// کلید ذخیره‌سازی: برای کارت‌های ثابت همان id، برای جایگاه چرخشی «چهارم»
+// ترکیب id+slotVersion — همین باعث می‌شود با عوض شدن تبلیغ‌کننده (slotVersion
+// جدید در reward-channels.js) کاربر دوباره واجد شرایط پاداش شود.
+function getRewardCardKey(card) {
+    return card.slotVersion ? `${card.id}:${card.slotVersion}` : card.id;
+}
+
+function getAllRewardCards() {
+    const fixedCards = (REWARD_CONFIG.channels || []).filter(c => c.active !== false);
+    const cards = [...fixedCards];
+    if (REWARD_CONFIG.rotatingSlot && REWARD_CONFIG.rotatingSlot.active !== false) {
+        cards.push(REWARD_CONFIG.rotatingSlot);
+    }
+    return cards;
+}
+
+function isRewardChannelClaimed(card) {
+    return !!GameState.rewards.channels[getRewardCardKey(card)];
+}
+
+function renderRewardChannelsSection() {
+    const container = document.getElementById('reward-channels-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    getAllRewardCards().forEach(card => {
+        const key = getRewardCardKey(card);
+        const claimed = isRewardChannelClaimed(card);
+        const returned = rewardChannelsReturned.has(key);
+
+        const row = document.createElement('div');
+        row.className = 'reward-channel-card';
+        row.innerHTML = `
+            <div class="reward-channel-info">
+                <h4 class="reward-channel-name">${card.name}</h4>
+                <span class="reward-channel-coins">🪙 ${card.reward} سکه</span>
+            </div>`;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ios-btn reward-channel-btn';
+        if (claimed) {
+            btn.textContent = '✅ دریافت شد';
+            btn.classList.add('reward-btn-claimed');
+            btn.disabled = true;
+        } else if (returned) {
+            btn.textContent = 'دریافت';
+            btn.classList.add('reward-btn-claim');
+            btn.addEventListener('click', () => claimRewardChannel(card));
+        } else {
+            btn.textContent = 'عضویت';
+            btn.classList.add('reward-btn-join');
+            btn.addEventListener('click', () => openRewardChannelInfo(card));
+        }
+        row.appendChild(btn);
+        container.appendChild(row);
+    });
+}
+
+// قدم اول: پیام اطلاع‌رسانی («حتماً عضو کانال شوید...») قبل از باز شدن کانال.
+function openRewardChannelInfo(card) {
+    AudioEngine.tap();
+    pendingRewardCardKey = getRewardCardKey(card);
+    const textEl = document.getElementById('reward-join-info-text');
+    if (textEl) {
+        textEl.textContent = `برای دریافت سکه، لطفاً داخل کانال ${card.name} عضو شوید و پست‌ها را با دقت و به‌آرامی سین کنید تا سکه‌های شما فعال شوند.`;
+    }
+    const enterBtn = document.getElementById('btn-reward-enter-channel');
+    enterBtn.onclick = () => {
+        AudioEngine.tap();
+        openExternalLink(`https://eitaa.com/${card.username}`);
+    };
+    document.getElementById('modal-reward-join-info').classList.remove('hidden');
+}
+
+// وقتی کاربر از کانال به رازک برمی‌گردد (تب/اپ دوباره «دیده» می‌شود)، اگر
+// یک کارت پاداش در انتظار بود، self-report ثبت می‌شود و دکمه‌اش زرد→سبز
+// تغییر می‌کند. توضیح کامل محدودیت این روش بالای همین بخش آمده است.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && pendingRewardCardKey) {
+        rewardChannelsReturned.add(pendingRewardCardKey);
+        pendingRewardCardKey = null;
+        document.getElementById('modal-reward-join-info').classList.add('hidden');
+        renderRewardChannelsSection();
+    }
+});
+
+function claimRewardChannel(card) {
+    const key = getRewardCardKey(card);
+    if (isRewardChannelClaimed(card)) return; // ضدتقلب: هر کلید فقط یک‌بار قابل دریافت است
+    AudioEngine.success();
+    GameState.globalScore += card.reward;
+    GameState.totalEarned += card.reward;
+    GameState.rewards.channels[key] = true;
+    rewardChannelsReturned.delete(key);
+    checkMedals();
+    StorageManager.save();
+    renderHome();
+    renderRewardChannelsSection();
+    showToast('🎊', `با عضویت در کانال ${card.name}، ${card.reward} سکه به شما داده شد. مبارکه 🎊`);
+}
+
+function renderRewardsModal() {
+    renderDailyRewardSection();
+    renderRewardChannelsSection();
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+    if (window.Eitaa && window.Eitaa.WebApp) {
+        window.Eitaa.WebApp.ready();
+        window.Eitaa.WebApp.expand();
+        const eitaaUser = window.Eitaa.WebApp.initDataUnsafe?.user;
+        const resolvedId = resolveEitaaUserId(eitaaUser);
+        if (eitaaUser && resolvedId) {
+            // عمداً merge می‌کنیم نه جایگزینی کامل GameState.user: اگر SDK در
+            // یک نسخه فیلدی (مثلاً photo_url) را برنگرداند، مقدار پیش‌فرض حذف
+            // نمی‌شود. مهم‌تر از همه: id همیشه از resolveEitaaUserId می‌آید که
+            // تضمین می‌کند هرگز undefined/NaN به کلید ذخیره‌سازی نشت نمی‌کند.
+            GameState.user = { ...GameState.user, ...eitaaUser, id: resolvedId };
+        }
+        // اگر eitaaUser وجود داشت ولی id قابل تشخیص نبود، عمداً GameState.user
+        // را دست‌نخورده (guest) نگه می‌داریم — بهتر است کاربر به‌عنوان مهمان
+        // دیده شود تا اینکه با کلید نادرست (eitaa_game_undefined) به رکورد
+        // اشتباهی وصل شود یا رکورد واقعی‌اش گم به‌نظر برسد.
+    }
+
+    try {
+        const res = await fetch('data.json');
+        DB = await res.json();
+    } catch (e) {
+        DB = { categories: [{ id: "proverbs", name: "ضرب‌المثل‌ها", icon: "🎭", levels: [{ emoji: "👂🏻🚪👂🏻🥅", answer: "یه گوشش دره یه گوشش دروازه" }] }] };
+    }
+
+    StorageManager.load(() => {
+        document.getElementById('toggle-theme').checked = GameState.settings.darkMode;
+        document.getElementById('toggle-sound').checked = GameState.settings.sound;
+        document.getElementById('settings-version-label').textContent = `نسخه ${APP_VERSION}`;
+        applyTheme();
+        setupEvents();
+        renderHome();
+        checkForUpdates();
+        preloadUpcomingEmojis();
+    });
+});
