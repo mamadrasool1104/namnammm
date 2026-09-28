@@ -21,16 +21,20 @@
     --shadow-md: 0 6px 0 rgba(43, 33, 24, 0.10);
     --ease-pop: cubic-bezier(.34, 1.56, .64, 1);
 }
+/* تم تاریک: دقیقاً همان مقادیر مشکیِ نسخه‌ی قبل (style.css)؛ فقط سایه/خط
+   استیکری روی همان رنگ‌ها اعمال می‌شود. */
 [data-theme="dark"] {
-    --bg-main: #16142a;
-    --bg-main-rgb: 22, 20, 42;
-    --card-bg: #211f3b;
-    --text-main: #f4ead8;
-    --text-muted: #a49fbd;
-    --border-color: #34315a;
-    --ink: #0b0a18;
-    --stick-shadow: 4px 4px 0 #0b0a18;
-    --shadow-md: 0 6px 0 rgba(0, 0, 0, 0.35);
+    --bg-main: #121214;
+    --bg-main-rgb: 18, 18, 20;
+    --card-bg: #1e1e21;
+    --text-main: #e6e6ea;
+    --text-muted: #96969c;
+    --border-color: #38383a;
+    --ios-blue: #007aff;
+    --ios-orange: #ff9500;
+    --ink: #000000;
+    --stick-shadow: 4px 4px 0 #000000;
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 /* بافت ظریف کاغذ (گرین) روی پس‌زمینه؛ خیلی کم‌رنگ تا خوانایی خراب نشه */
