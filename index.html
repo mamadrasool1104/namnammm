@@ -14,6 +14,7 @@
 
     <link rel="preload" href="data.json" as="fetch" crossorigin>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="theme.css">
 
     <!-- Eitaa SDK: با defer لود می‌شود تا جلوی نمایش سریع صفحه را نگیرد -->
     <script src="https://developer.eitaa.com/eitaa-web-app.js" defer></script>
@@ -56,17 +57,6 @@
                     <span class="badge" id="medals-count">0/0</span>
                 </div>
                 <div class="medals-scroll" id="medals-container"></div>
-            </section>
-
-            <section class="hero-section">
-                <div class="hero-banner" id="hero-banner">
-                    <div class="hero-ring" id="hero-ring"><span class="hero-ring-text" id="hero-percent">0٪</span></div>
-                    <div class="hero-info">
-                        <div class="hero-title" id="hero-title">بزن بریم!</div>
-                        <div class="hero-sub" id="hero-sub"></div>
-                        <button type="button" class="hero-btn" id="btn-hero-continue">ادامه‌ی بازی 🚀</button>
-                    </div>
-                </div>
             </section>
 
             <section class="categories-section">
@@ -303,7 +293,7 @@
                         </span>
                         <span>جایزه</span>
                     </div>
-                    <span class="setting-version">‹</span>
+                    <span class="setting-chevron">‹</span>
                 </div>
             </div>
 
@@ -394,16 +384,6 @@
             <p id="reward-join-info-text">برای دریافت سکه، لطفاً داخل کانال عضو شوید و پست‌ها را با دقت و به‌آرامی سین کنید تا سکه‌های شما فعال شوند.</p>
             <button type="button" id="btn-reward-enter-channel" class="ios-btn primary-btn w-100">ورود به کانال</button>
             <button type="button" class="ios-btn ghost-btn w-100 close-btn" data-close="modal-reward-join-info">بعداً</button>
-        </div>
-    </div>
-
-    <div id="modal-daily-reminder" class="modal-overlay hidden">
-        <div class="ios-modal pop-in daily-reminder-modal">
-            <div class="modal-icon">🎁</div>
-            <h2>امتیاز امروزت منتظرته!</h2>
-            <p>تا امتیاز امروزو از دست ندادی، برو بگیرش 🪙</p>
-            <button type="button" id="btn-reminder-go" class="ios-btn primary-btn w-100">برو امتیازمو بگیرم 🎁</button>
-            <button type="button" class="ios-btn ghost-btn w-100 close-btn" data-close="modal-daily-reminder">بعداً</button>
         </div>
     </div>
 
