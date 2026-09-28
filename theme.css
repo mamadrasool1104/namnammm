@@ -1,0 +1,108 @@
+/* =====================================================
+   RAZAK — لایه‌ی تم (هویت بصری اختصاصی)
+   بعد از style.css لود می‌شود و فقط override می‌کند؛ برای برگشت به ظاهر
+   قبلی کافیه تگ <link> این فایل را از index.html حذف کنی.
+   ایده: «کاغذ گرم + کارت‌های استیکری» — به‌جای iOS-clone، حس یک بازی
+   کاغذی/چاپی با یک رنگ شاخص (زعفرانی) و سایه‌های سخت.
+===================================================== */
+:root {
+    --bg-main: #fff4e0;
+    --bg-main-rgb: 255, 244, 224;
+    --card-bg: #fffdf8;
+    --text-main: #2b2118;
+    --text-muted: #8a7761;
+    --border-color: #ecdcc0;
+    --ios-blue: #4b4fd6;
+    --ios-orange: #ff8a1f;
+    --accent: #ff6b35;
+    --accent-2: #ffc93c;
+    --ink: #2b2118;
+    --stick-shadow: 4px 4px 0 var(--ink);
+    --shadow-md: 0 6px 0 rgba(43, 33, 24, 0.10);
+    --ease-pop: cubic-bezier(.34, 1.56, .64, 1);
+}
+[data-theme="dark"] {
+    --bg-main: #16142a;
+    --bg-main-rgb: 22, 20, 42;
+    --card-bg: #211f3b;
+    --text-main: #f4ead8;
+    --text-muted: #a49fbd;
+    --border-color: #34315a;
+    --ink: #0b0a18;
+    --stick-shadow: 4px 4px 0 #0b0a18;
+    --shadow-md: 0 6px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* بافت ظریف کاغذ (گرین) روی پس‌زمینه؛ خیلی کم‌رنگ تا خوانایی خراب نشه */
+body {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3  0 0 0 0 0.2  0 0 0 0 0.1  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+[data-theme="dark"] body { background-image: none; }
+
+/* کارت‌های استیکری: خط دور تیره + سایه‌ی سخت (نه سایه‌ی مه‌آلود پیش‌فرض) */
+.category-card,
+.ios-list,
+.reward-channel-card,
+.daily-challenge-card,
+.daily-reward-card,
+.ios-modal {
+    border: 2px solid var(--ink);
+    box-shadow: var(--stick-shadow);
+}
+.category-card { border-radius: 20px; transition: transform .15s var(--ease-pop), box-shadow .15s; }
+.category-card:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+.category-card.locked { border-style: dashed; box-shadow: none; }
+
+/* کارت روزانه و جایزه: رنگ تخت و شاخص به‌جای گرادینت پیش‌فرض */
+.daily-challenge-card { background: var(--accent); }
+.daily-challenge-card.done { background: #2fbf71; }
+.daily-reward-card { background: var(--accent-2); color: var(--ink); }
+.daily-reward-sub { color: rgba(43, 33, 24, .75); }
+.daily-pip-dot { background: rgba(43, 33, 24, .12); }
+.daily-pip.claimed .daily-pip-dot { background: var(--ink); color: var(--accent-2); }
+.daily-pip.today .daily-pip-dot { box-shadow: 0 0 0 2px var(--ink); }
+.daily-reward-btn { background: var(--ink); color: var(--accent-2); }
+
+/* دکمه‌ها: حس فشرده‌شدن فیزیکی */
+.ios-btn { transition: transform .12s var(--ease-pop), box-shadow .12s; }
+.primary-btn {
+    background: var(--accent);
+    color: #fff;
+    border: 2px solid var(--ink);
+    box-shadow: 0 4px 0 var(--ink);
+}
+.primary-btn:active { opacity: 1; transform: translateY(4px); box-shadow: 0 0 0 var(--ink); }
+.reward-btn-join { border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.reward-btn-claim { border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+
+/* پیل امتیاز: شبیه سکه‌ی چاپی */
+.score-pill {
+    background: var(--accent-2);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    font-weight: 800;
+}
+
+/* کلیدهای بازی: کیک‌کپ‌های رنگی به‌جای دکمه‌ی خاکستری */
+.key {
+    background: var(--card-bg);
+    color: var(--text-main);
+    border: 2px solid var(--ink);
+    box-shadow: 0 4px 0 var(--ink);
+}
+.key:active { transform: translateY(4px); box-shadow: 0 0 0 var(--ink); }
+
+/* ردیف‌های تنظیمات: جداکننده‌ی گرم‌تر */
+.ios-list-item + .ios-list-item { border-top: 1.5px dashed var(--border-color); }
+
+/* ورود مودال‌ها: کمی فنری (overshoot) */
+@keyframes razakPop { 0% { transform: scale(.86); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes razakRise { 0% { transform: translateY(40px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+.ios-modal.pop-in { animation: razakPop .38s var(--ease-pop) both; }
+.ios-modal.slide-up { animation: razakRise .4s var(--ease-pop) both; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ios-modal.pop-in, .ios-modal.slide-up { animation: none; }
+    .category-card, .ios-btn { transition: none; }
+}
