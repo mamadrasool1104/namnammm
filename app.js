@@ -1821,6 +1821,7 @@ function claimDailyReward() {
     AudioEngine.success();
     renderHome();
     renderDailyRewardSection();
+    updateDailyReminderBadge();
     showToast('🎁', `${amount} سکه امتیاز روزانه‌ت رو گرفتی! مبارکه 🎊`);
 }
 
@@ -1970,6 +1971,45 @@ function renderRewardsModal() {
     renderRewardChannelsSection();
 }
 
+/* =========================================
+   یادآوری روزانه‌ی امتیاز
+   (مینی‌اپ نمی‌تواند وقتی بسته است نوتیفیکیشن بفرستد؛ پس هر بار برنامه
+   باز شود یا به پیش‌زمینه برگردد، اگر امتیاز امروز گرفته نشده، روزی یک‌بار
+   پیام یادآوری نشان می‌دهیم + نقطه‌ی قرمز روی دکمه‌ی تنظیمات تا گرفته شود.)
+========================================= */
+const DAILY_REMINDER_KEY = 'razak_daily_reminder_shown';
+
+function updateDailyReminderBadge() {
+    const btn = document.getElementById('btn-open-settings');
+    if (btn) btn.classList.toggle('has-reminder', canClaimDailyRewardToday());
+}
+
+function maybeShowDailyReminder() {
+    updateDailyReminderBadge();
+    if (!canClaimDailyRewardToday()) return;
+    const todayKey = getTodayKey();
+    let shown = null;
+    try { shown = localStorage.getItem(DAILY_REMINDER_KEY); } catch (e) {}
+    if (shown === todayKey) return;
+    // اگر مودال دیگری باز است (مثلاً تازه‌های اپ یا عضویت اجباری)، تداخل نکن
+    if (document.querySelector('.modal-overlay:not(.hidden)')) return;
+    try { localStorage.setItem(DAILY_REMINDER_KEY, todayKey); } catch (e) {}
+    document.getElementById('modal-daily-reminder').classList.remove('hidden');
+}
+
+function setupDailyReminder() {
+    document.getElementById('btn-reminder-go').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-daily-reminder').classList.add('hidden');
+        renderRewardsModal();
+        document.getElementById('modal-rewards').classList.remove('hidden');
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) setTimeout(maybeShowDailyReminder, 600);
+    });
+    setTimeout(maybeShowDailyReminder, 1800);
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
     if (window.Eitaa && window.Eitaa.WebApp) {
         window.Eitaa.WebApp.ready();
@@ -2005,5 +2045,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         renderHome();
         checkForUpdates();
         preloadUpcomingEmojis();
+        setupDailyReminder();
     });
 });
