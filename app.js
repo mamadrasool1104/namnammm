@@ -878,7 +878,13 @@ function selectAvatarPhoto(avatarId, matchingGender) {
 }
 
 function renderHome() {
-    document.getElementById('home-total-score').textContent = GameState.globalScore;
+    const scoreEl = document.getElementById('home-total-score');
+    const prevShown = parseInt(scoreEl.textContent, 10);
+    scoreEl.textContent = GameState.globalScore;
+    if (!isNaN(prevShown) && GameState.globalScore > prevShown) {
+        const pill = scoreEl.closest('.score-pill');
+        pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump');
+    }
     document.getElementById('user-name').textContent = getDisplayName();
 
     applyAvatarVisual(document.getElementById('user-avatar'), GameState.settings.gender);
@@ -925,8 +931,58 @@ function renderHome() {
     });
 
     renderDailyChallengeCard();
+    renderHeroBanner();
     renderChannelPromos();
     renderSuggestionsSection();
+}
+
+// بنر بزرگ وسط صفحه: درصد پیشرفت کل بازی + دکمه‌ی ادامه (اولین دسته‌ی ناتمام)
+function renderHeroBanner() {
+    const banner = document.getElementById('hero-banner');
+    if (!banner) return;
+    let done = 0, total = 0, next = null;
+    DB.categories.forEach(cat => {
+        const t = cat.levels.length;
+        const d = Math.min(GameState.progress[cat.id]?.length || 0, t);
+        total += t; done += d;
+        if (!next && t > 0 && d < t) next = cat;
+    });
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    const toFa = n => String(n).replace(/\d/g, x => '۰۱۲۳۴۵۶۷۸۹'[x]);
+    document.getElementById('hero-ring').style.setProperty('--p', percent);
+    document.getElementById('hero-percent').textContent = `${toFa(percent)}٪`;
+    const btn = document.getElementById('btn-hero-continue');
+    if (next) {
+        document.getElementById('hero-title').textContent = `${getDisplayName()}، آماده‌ای؟`;
+        document.getElementById('hero-sub').textContent = `${toFa(done)} از ${toFa(total)} مرحله رو حل کردی؛ مرحله‌ی بعدی توی «${next.name}» منتظرته`;
+        btn.classList.remove('hidden');
+        btn.onclick = () => { AudioEngine.tap(); requireChannelJoin(() => startCategory(next)); };
+    } else {
+        document.getElementById('hero-title').textContent = 'همه‌ی مرحله‌ها تموم شد 🎉';
+        document.getElementById('hero-sub').textContent = total > 0 ? 'فعلاً همه‌ی مرحله‌ها رو حل کردی! به‌زودی مرحله‌های جدید میاد.' : '';
+        btn.classList.add('hidden');
+        btn.onclick = null;
+    }
+}
+
+// جشن گرفتن جایزه: چند سکه‌ی فنری از روی المان می‌پرن بیرون
+function coinBurst(anchor) {
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    for (let i = 0; i < 9; i++) {
+        const c = document.createElement('span');
+        c.className = 'coin-burst';
+        c.textContent = '🪙';
+        const angle = (Math.PI * 2 * i) / 9 + Math.random() * 0.5;
+        const dist = 70 + Math.random() * 60;
+        c.style.left = cx + 'px'; c.style.top = cy + 'px';
+        c.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+        c.style.setProperty('--dy', Math.sin(angle) * dist - 30 + 'px');
+        c.style.setProperty('--rot', (Math.random() * 240 - 120) + 'deg');
+        document.body.appendChild(c);
+        setTimeout(() => c.remove(), 1000);
+    }
 }
 
 // بخش «پیشنهادات شما 🫂» — جایگزین کارت قبلی «به‌زودی...» است. تمام متن‌ها
@@ -1822,6 +1878,9 @@ function claimDailyReward() {
     renderHome();
     renderDailyRewardSection();
     updateDailyReminderBadge();
+    const rewardCard = document.querySelector('.daily-reward-card');
+    if (rewardCard) { rewardCard.classList.remove('celebrate'); void rewardCard.offsetWidth; rewardCard.classList.add('celebrate'); }
+    coinBurst(document.getElementById('btn-claim-daily-reward'));
     showToast('🎁', `${amount} سکه امتیاز روزانه‌ت رو گرفتی! مبارکه 🎊`);
 }
 
