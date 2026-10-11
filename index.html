@@ -66,20 +66,6 @@
                 <div class="categories-list" id="categories-container"></div>
             </section>
 
-            <section class="suggestions-section" id="suggestions-section">
-                <div class="section-header">
-                    <h2 id="suggestions-title">پیشنهادات شما 🫂</h2>
-                </div>
-                <div class="suggestions-card">
-                    <p class="suggestions-intro" id="suggestions-intro"></p>
-                    <pre class="suggestions-template" id="suggestions-template"></pre>
-                    <div class="suggestions-actions">
-                        <button type="button" id="btn-copy-suggestion-template" class="ios-btn ghost-btn">📋 کپی متن</button>
-                        <button type="button" id="btn-send-suggestion" class="ios-btn primary-btn">ارسال پیشنهاد</button>
-                    </div>
-                </div>
-            </section>
-
             <section class="channel-promo-section">
                 <div class="section-header">
                     <h2>
@@ -258,6 +244,15 @@
                 </ul>
             </div>
 
+            <div class="join-gate-channel-block hidden" data-channel-id="partner">
+                <p class="join-gate-msg">📌 یه کانال خوب دیگه هم منتظرته 👇</p>
+                <ul class="join-gate-benefits">
+                    <li><span class="jg-icon">✨</span> محتوای تازه و متفاوت</li>
+                    <li><span class="jg-icon">🫶</span> یه فضای دوست‌داشتنی برای تو</li>
+                    <li><span class="jg-icon">🔥</span> همیشه چیز جدیدی برای دیدن داره</li>
+                </ul>
+            </div>
+
             <div class="join-gate-channels" id="join-gate-channels"></div>
 
             <button id="btn-confirm-joined" class="ios-btn ghost-btn w-100">✅ بررسی عضویت و ادامه</button>
@@ -292,6 +287,15 @@
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
                         </span>
                         <span>جایزه</span>
+                    </div>
+                    <span class="setting-chevron">‹</span>
+                </div>
+                <div class="ios-list-item clickable" id="btn-open-ideas">
+                    <div class="setting-label">
+                        <span class="setting-icon-square icon-ideas">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg>
+                        </span>
+                        <span>ایده‌های شما</span>
                     </div>
                     <span class="setting-chevron">‹</span>
                 </div>
@@ -361,7 +365,7 @@
             <div class="rewards-body">
                 <div class="daily-reward-card">
                     <div class="daily-reward-title">🎁 امتیاز روزانه</div>
-                    <div class="daily-reward-sub">هر روز (شنبه تا جمعه) یک‌بار، بین ۱۰ تا ۸۵ سکه رایگان بگیر</div>
+                    <div class="daily-reward-sub">هر روز بیا اینجا و سکه مغتی بگیر و عشق کن خوشکله</div>
                     <div class="daily-reward-pips" id="daily-reward-pips"></div>
                     <button type="button" id="btn-claim-daily-reward" class="ios-btn daily-reward-btn">🎁 دریافت امتیاز امروز</button>
                 </div>
@@ -375,6 +379,23 @@
     <!-- پیام اطلاع‌رسانی قبل از باز شدن کانال پاداش. متن این پاراگراف
          داینامیک است و هر بار قبل از نمایش، با نام همان کانال توسط جاوااسکریپت
          پر می‌شود (نگاه کن به تابع openRewardChannelInfo در app.js) -->
+    <div id="modal-ideas" class="modal-overlay hidden">
+        <div class="ios-modal slide-up settings-modal">
+            <div class="modal-header">
+                <h2 id="suggestions-title">💡 ایده‌های شما</h2>
+                <button class="close-btn" data-close="modal-ideas">×</button>
+            </div>
+            <div class="suggestions-card" id="suggestions-section">
+                <p class="suggestions-intro" id="suggestions-intro"></p>
+                <pre class="suggestions-template" id="suggestions-template"></pre>
+                <div class="suggestions-actions">
+                    <button type="button" id="btn-copy-suggestion-template" class="ios-btn ghost-btn">📋 کپی متن</button>
+                    <button type="button" id="btn-send-suggestion" class="ios-btn primary-btn">ارسال پیشنهاد</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="modal-reward-join-info" class="modal-overlay hidden">
         <div class="ios-modal pop-in reward-join-info-modal">
             <div class="modal-icon join-gate-icon">
@@ -384,6 +405,16 @@
             <p id="reward-join-info-text">برای دریافت سکه، لطفاً داخل کانال عضو شوید و پست‌ها را با دقت و به‌آرامی سین کنید تا سکه‌های شما فعال شوند.</p>
             <button type="button" id="btn-reward-enter-channel" class="ios-btn primary-btn w-100">ورود به کانال</button>
             <button type="button" class="ios-btn ghost-btn w-100 close-btn" data-close="modal-reward-join-info">بعداً</button>
+        </div>
+    </div>
+
+    <div id="modal-daily-reminder" class="modal-overlay hidden">
+        <div class="ios-modal pop-in daily-reminder-modal">
+            <div class="modal-icon">🎁</div>
+            <h2>امتیاز امروزت منتظره!</h2>
+            <p>هنوز امتیاز روزانه‌ات رو نگرفتی؛ بیا و بگیرش 🪙</p>
+            <button type="button" id="btn-reminder-go" class="ios-btn primary-btn w-100">برو بگیر</button>
+            <button type="button" class="ios-btn ghost-btn w-100 close-btn" data-close="modal-daily-reminder">بعداً</button>
         </div>
     </div>
 
@@ -403,6 +434,7 @@
             }
         });
     </script>
+    <script src="partner.js"></script>
     <script src="index.js"></script>
     <script src="channel-photos.js"></script>
     <script src="reward-channels.js"></script>
