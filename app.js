@@ -64,10 +64,10 @@ const ROTATION_CONFIG = (typeof window !== 'undefined' && window.MANDATORY_CHANN
         startDate: '2025-01-06T00:00:00+03:30',
         weeksPerChannel: 1,
         channels: [
-            { id: 'avay_khiyal', type: 'channel', name: 'آوای‌خیال', icon: '🕊️', username: 'avay_khiyal', enabled: true },
+            { id: 'avay_khiyal', type: 'channel', name: 'آواي‌خـــــــــیال', icon: '🕊️', username: 'avay_khiyal', enabled: true },
             { id: 'tech_nour', type: 'channel', name: 'تِک‌نور', icon: '📢', username: 'Tech_nour', enabled: true },
             { id: 'rasa_meme', type: 'channel', name: 'رسامیم', icon: '😂', username: 'Rasa_Meme', enabled: true },
-            { id: 'partner', type: 'partner', name: 'کانال همکار', icon: '🤝', username: 'PARTNER_USERNAME_HERE', enabled: true }
+            { id: 'partner', type: 'partner', name: 'آشوب درون | Ashob daron', icon: '📌', username: 'Ashob_daron', enabled: true }
         ]
       };
 // این خط چیزی را عوض نمی‌کند؛ فقط برای دیباگ از کنسول مرورگر در دسترس
@@ -931,7 +931,6 @@ function renderHome() {
     });
 
     renderDailyChallengeCard();
-    renderHeroBanner();
     renderChannelPromos();
     renderSuggestionsSection();
 }
@@ -994,7 +993,7 @@ function renderSuggestionsSection() {
     const section = document.getElementById('suggestions-section');
     if (!section || !s) return;
 
-    document.getElementById('suggestions-title').textContent = s.title || 'پیشنهادات شما 🫂';
+    document.getElementById('suggestions-title').textContent = s.title || '💡 ایده‌های شما';
     document.getElementById('suggestions-intro').textContent = s.intro || '';
     document.getElementById('suggestions-template').textContent = s.template || '';
 
@@ -1693,6 +1692,11 @@ function setupEvents() {
         renderRewardsModal();
         document.getElementById('modal-rewards').classList.remove('hidden');
     });
+    document.getElementById('btn-open-ideas').addEventListener('click', () => {
+        AudioEngine.tap();
+        document.getElementById('modal-settings').classList.add('hidden');
+        document.getElementById('modal-ideas').classList.remove('hidden');
+    });
     document.getElementById('btn-claim-daily-reward').addEventListener('click', claimDailyReward);
     document.getElementById('btn-open-changelog').addEventListener('click', () => {
         AudioEngine.tap();
@@ -2053,13 +2057,16 @@ function maybeShowDailyReminder() {
     // اگر مودال دیگری باز است (مثلاً تازه‌های اپ یا عضویت اجباری)، تداخل نکن
     if (document.querySelector('.modal-overlay:not(.hidden)')) return;
     try { localStorage.setItem(DAILY_REMINDER_KEY, todayKey); } catch (e) {}
-    document.getElementById('modal-daily-reminder').classList.remove('hidden');
+    const reminderModal = document.getElementById('modal-daily-reminder');
+    if (reminderModal) reminderModal.classList.remove('hidden');
 }
 
 function setupDailyReminder() {
-    document.getElementById('btn-reminder-go').addEventListener('click', () => {
+    const goBtn = document.getElementById('btn-reminder-go');
+    if (goBtn) goBtn.addEventListener('click', () => {
         AudioEngine.tap();
-        document.getElementById('modal-daily-reminder').classList.add('hidden');
+        const rm = document.getElementById('modal-daily-reminder');
+        if (rm) rm.classList.add('hidden');
         renderRewardsModal();
         document.getElementById('modal-rewards').classList.remove('hidden');
     });
