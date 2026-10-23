@@ -642,6 +642,15 @@ input:checked + .slider:before { transform: translateX(20px); }
     background: linear-gradient(135deg, #1a1a1a, #2b2b2b 55%, #3d1f1f);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 59, 48, 0.18);
 }
+/* کانال «آشوب درون»: همان فضای تیره و مه‌آلود آوای‌خیال، اما با حال‌وهوای
+   طلایی (گرادیان قهوه‌ای-طلایی تیره + قاب و درخشش طلایی ظریف). */
+.channel-promo-card.theme-gold {
+    background: linear-gradient(135deg, #1a1a1a, #2b2b2b 50%, #5a4214);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), 0 0 16px rgba(212, 175, 55, 0.22), inset 0 0 0 1px rgba(212, 175, 55, 0.45);
+}
+.channel-promo-card.theme-gold .channel-promo-title { color: #f5d77a; }
+.channel-promo-card.theme-gold .channel-promo-icon { box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.6); background: rgba(212, 175, 55, 0.12); }
+.channel-promo-card.theme-gold .channel-promo-arrow { color: #f5d77a; }
 .channel-promo-card.theme-meme { background: linear-gradient(135deg, #f9d423, #ff4e50); }
 
 /* --- کارت تبلیغ (داخل همون کاروسل کانال‌ها، ولی عمداً رنگ/ظاهر متفاوت
@@ -993,7 +1002,3 @@ input:checked + .slider:before { transform: translateX(20px); }
 }
 .hero-btn:active { transform: scale(0.92); }
 .hero-btn.hidden { display: none; }
-
-.setting-icon-square.icon-ideas { background: linear-gradient(135deg, #ffd60a, #ff9f0a); }
-.ios-modal .suggestions-card { margin: 0; box-shadow: none; }
-.suggestions-intro { white-space: pre-line; }
