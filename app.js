@@ -150,8 +150,17 @@ const CATEGORY_SCORES = {
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.11.0';
 const CHANGELOG_DB = [
+    {
+        version: '1.11.0',
+        added: [
+            '۱۰ معمای تازه به هر کدام از دسته‌های ضرب‌المثل‌ها، فیلم و سریال و کشورها اضافه شد',
+            '۴۰ معمای تازه به دسته‌ی اصطلاحات اضافه شد',
+            'کانال جدید «آشوب درون» به بخش کانال‌های ما اضافه شد',
+            'عکس پروفایل واقعی کانال‌ها در بخش کانال‌های ما نمایش داده می‌شود'
+        ]
+    },
     {
         version: '1.10.0',
         added: [
@@ -356,6 +365,16 @@ const CHANNEL_PROMOS = [
         photoKey: 'rasa_meme',
         link: 'https://eitaa.com/Rasa_Meme',
         theme: 'meme'
+    },
+    {
+        type: 'channel',
+        name: 'آشوب درون | Ashob daron',
+        handle: '@Ashob_daron',
+        desc: 'آشوب درون؛ جایی برای حرف‌های ناگفته، احساسات عمیق و افکاری که در سکوت جریان دارن.',
+        iconType: 'poetry',
+        photoKey: 'ashob_daron',
+        link: 'https://eitaa.com/Ashob_daron',
+        theme: 'gold'
     }
 ];
 
@@ -993,7 +1012,7 @@ function renderSuggestionsSection() {
     const section = document.getElementById('suggestions-section');
     if (!section || !s) return;
 
-    document.getElementById('suggestions-title').textContent = s.title || '💡 ایده‌های شما';
+    document.getElementById('suggestions-title').textContent = s.title || 'پیشنهادات شما 🫂';
     document.getElementById('suggestions-intro').textContent = s.intro || '';
     document.getElementById('suggestions-template').textContent = s.template || '';
 
@@ -1691,11 +1710,6 @@ function setupEvents() {
         document.getElementById('modal-settings').classList.add('hidden');
         renderRewardsModal();
         document.getElementById('modal-rewards').classList.remove('hidden');
-    });
-    document.getElementById('btn-open-ideas').addEventListener('click', () => {
-        AudioEngine.tap();
-        document.getElementById('modal-settings').classList.add('hidden');
-        document.getElementById('modal-ideas').classList.remove('hidden');
     });
     document.getElementById('btn-claim-daily-reward').addEventListener('click', claimDailyReward);
     document.getElementById('btn-open-changelog').addEventListener('click', () => {
