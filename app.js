@@ -23,6 +23,12 @@ function resolveEitaaUserId(rawUser) {
     return String(candidate);
 }
 
+// جایی که پیشنهادهای کاربران ذخیره می‌شود (فرم «انتقادات و پیشنهادات»).
+// به‌طور پیش‌فرض همان باکت KVDB بازی است؛ می‌توانی یک باکت جداگانه بسازی و
+// شناسه‌اش را اینجا بگذاری. تا وقتی شناسه‌ی واقعی تنظیم نشده باشد، ارسال
+// مستقیم ممکن نیست و فرم صادقانه کاربر را به ارسال دستی در پیوی راهنمایی می‌کند.
+const SUGGESTIONS_BUCKET_ID = KVDB_BUCKET_ID;
+const SUGGESTIONS_PV_URL = 'https://eitaa.com/ferstadeh';
 const PERSIAN_ALPHABET = "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی";
 const HINT_COST = 15;
 // این دو تا هنوز برای کارت‌های «کانال‌های ما» در پایین صفحه استفاده می‌شوند.
@@ -150,8 +156,15 @@ const CATEGORY_SCORES = {
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.13.0';
 const CHANGELOG_DB = [
+    {
+        version: '1.13.0',
+        added: [
+            'صفحه‌ی «انتقادات و پیشنهادات» با فرم ارسال ایده و ایموجی پیشنهادی',
+            'گزینه‌ی «انتقادات و پیشنهادات» در تنظیمات (باز شدن پیوی در ایتا)'
+        ]
+    },
     {
         version: '1.12.0',
         added: [
@@ -952,16 +965,19 @@ function renderHome() {
         // نشده) خودکار همین رفتار را می‌گیرد، بدون نیاز به هیچ کد اضافه‌ای؛
         // به‌محض این‌که در data.json حداقل یک مرحله به levels آن اضافه شود،
         // خودش قابل‌بازی می‌شود.
-        const isLocked = total === 0;
+        const isIdeas = cat.id === 'ideas'; // کارت ایده‌های شما → صفحه‌ی فرم پیشنهادات
+        const isLocked = total === 0 && !isIdeas;
         div.className = `category-card ${isLocked ? 'locked' : (completed === total ? 'completed' : '')}`;
         div.innerHTML = `
             <div class="cat-icon">${cat.icon}</div>
             <div class="cat-info">
                 <h3 class="cat-title">${cat.name}</h3>
-                <div class="cat-stats">${isLocked ? 'به‌زودی...' : `${completed} از ${total} مرحله`}</div>
-                ${isLocked ? '' : `<div class="progress-track"><div class="progress-fill" style="width: ${perc}%"></div></div>`}
+                <div class="cat-stats">${isIdeas ? 'ایده یا انتقادت رو برامون بفرست' : (isLocked ? 'به‌زودی...' : `${completed} از ${total} مرحله`)}</div>
+                ${(isLocked || isIdeas) ? '' : `<div class="progress-track"><div class="progress-fill" style="width: ${perc}%"></div></div>`}
             </div>`;
-        if (!isLocked) {
+        if (isIdeas) {
+            div.addEventListener('click', () => { AudioEngine.tap(); openSuggestionsPage(); });
+        } else if (!isLocked) {
             div.addEventListener('click', () => { AudioEngine.tap(); requireChannelJoin(() => openLevelSelect(cat)); });
         }
         catContainer.appendChild(div);
@@ -969,7 +985,6 @@ function renderHome() {
 
     renderDailyChallengeCard();
     renderChannelPromos();
-    renderSuggestionsSection();
 }
 
 // بنر بزرگ وسط صفحه: درصد پیشرفت کل بازی + دکمه‌ی ادامه (اولین دسته‌ی ناتمام)
@@ -1021,29 +1036,157 @@ function coinBurst(anchor) {
     }
 }
 
-// بخش «پیشنهادات شما 🫂» — جایگزین کارت قبلی «به‌زودی...» است. تمام متن‌ها
-// (عنوان، توضیح، متن الگو، برچسب دکمه‌ها، لینک ایتا) از DB.suggestions
-// خوانده می‌شود (بخش suggestions در data.json)، نه از این فایل — برای
-// تغییرشان فقط data.json را ویرایش کن.
-function renderSuggestionsSection() {
-    const s = DB.suggestions;
-    const section = document.getElementById('suggestions-section');
-    if (!section || !s) return;
+// =====================================================
+// صفحه‌ی «انتقادات و پیشنهادات» (کارت «ایده‌های شما» در صفحه‌ی اصلی)
+// =====================================================
+// ارسال واقعی: پیشنهاد با یک PUT به KVDB (کلید sug_<زمان>_<تصادفی>) ثبت
+// می‌شود و فقط وقتی «موفق» نمایش داده می‌شود که سرور واقعاً پاسخ ok بدهد.
+// خواندن پیشنهادها (مالک):
+//   https://kvdb.io/<BUCKET>/?prefix=sug_&values=true&format=json
+// اگر باکت تنظیم نشده یا ارسال شکست بخورد، پیام ساختگی «ارسال شد» نشان
+// داده نمی‌شود؛ به‌جایش متن آماده برای کپی و دکمه‌ی باز کردن پیوی می‌آید.
+const SUGGESTION_COOLDOWN_MS = 60 * 1000;
+const SUGGESTION_LAST_KEY = 'razak_last_suggestion_at';
+let suggestionSending = false;
 
-    document.getElementById('suggestions-title').textContent = s.title || 'پیشنهادات شما 🫂';
-    document.getElementById('suggestions-intro').textContent = s.intro || '';
-    document.getElementById('suggestions-template').textContent = s.template || '';
+function suggestionsBackendReady() {
+    return !!SUGGESTIONS_BUCKET_ID && SUGGESTIONS_BUCKET_ID !== 'YOUR_BUCKET_ID_HERE';
+}
 
-    const copyBtn = document.getElementById('btn-copy-suggestion-template');
-    copyBtn.textContent = s.copyButtonText || '📋 کپی متن';
-    copyBtn.onclick = () => copySuggestionTemplate(s.template || '');
+function openSuggestionsPage() {
+    const s = DB.suggestions || {};
+    if (s.intro) document.getElementById('suggestions-intro').textContent = s.intro;
+    clearSuggestionErrors();
+    hideSuggestionResult();
+    showScreen('screen-suggestions');
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+        window.Eitaa.WebApp.BackButton.show();
+    }
+}
 
-    const contactBtn = document.getElementById('btn-send-suggestion');
-    contactBtn.textContent = s.contactButtonText || 'ارسال پیشنهاد';
-    contactBtn.onclick = () => {
-        AudioEngine.tap();
-        openExternalLink(s.contactUrl || 'https://eitaa.com/ferstadeh');
+function clearSuggestionErrors() {
+    ['sg-name-err', 'sg-idea-err', 'sg-emojis-err'].forEach(id => { document.getElementById(id).textContent = ''; });
+    ['sg-name', 'sg-idea', 'sg-emojis'].forEach(id => document.getElementById(id).classList.remove('invalid'));
+}
+function hideSuggestionResult() {
+    document.getElementById('sg-result').classList.add('hidden');
+    document.getElementById('sg-result-actions').classList.add('hidden');
+}
+function showSuggestionResult(kind, text, withFallback) {
+    const box = document.getElementById('sg-result');
+    box.className = `suggest-result ${kind}`;
+    document.getElementById('sg-result-text').textContent = text;
+    document.getElementById('sg-result-actions').classList.toggle('hidden', !withFallback);
+}
+
+function readSuggestionForm() {
+    return {
+        name: document.getElementById('sg-name').value.replace(/\s+/g, ' ').trim(),
+        idea: document.getElementById('sg-idea').value.replace(/[ \t]+\n/g, '\n').trim(),
+        emojis: document.getElementById('sg-emojis').value.trim()
     };
+}
+
+function validateSuggestion(f) {
+    const errors = {};
+    if (f.name.length > 30) errors['sg-name'] = 'نام حداکثر ۳۰ کاراکتر باشد.';
+    if (f.idea.length === 0) errors['sg-idea'] = 'لطفاً ایده یا انتقادت رو بنویس.';
+    else if (f.idea.length < 10) errors['sg-idea'] = 'متن خیلی کوتاهه؛ حداقل ۱۰ کاراکتر بنویس.';
+    else if (f.idea.length > 1000) errors['sg-idea'] = 'متن حداکثر ۱۰۰۰ کاراکتر باشد.';
+    if (f.emojis) {
+        if (f.emojis.length > 60) errors['sg-emojis'] = 'ایموجی‌ها حداکثر ۶۰ کاراکتر باشند.';
+        else if (!/\p{Extended_Pictographic}/u.test(f.emojis)) errors['sg-emojis'] = 'اینجا فقط ایموجی بنویس (مثلاً 🎬🍿).';
+    }
+    return errors;
+}
+
+function buildSuggestionText(f) {
+    return `نام شما(اختیاری): ${f.name}\nایده و یا انتقاد شما: ${f.idea}\nایموجی های پیشنهادی: ${f.emojis}`;
+}
+
+// برمی‌گرداند: { ok: true } یا { ok: false, reason: 'not-configured' | 'network' | 'server' }
+async function sendSuggestion(f) {
+    if (!suggestionsBackendReady()) return { ok: false, reason: 'not-configured' };
+    const key = `sug_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const body = JSON.stringify({
+        name: f.name, idea: f.idea, emojis: f.emojis,
+        date: new Date().toISOString(), appVersion: APP_VERSION
+    });
+    try {
+        const res = await fetch(`https://kvdb.io/${SUGGESTIONS_BUCKET_ID}/${key}`, { method: 'PUT', body });
+        return res.ok ? { ok: true } : { ok: false, reason: 'server' };
+    } catch (e) {
+        return { ok: false, reason: 'network' };
+    }
+}
+
+async function submitSuggestion() {
+    if (suggestionSending) return;
+    AudioEngine.tap();
+    clearSuggestionErrors();
+    hideSuggestionResult();
+    const f = readSuggestionForm();
+    const errors = validateSuggestion(f);
+    const ids = Object.keys(errors);
+    if (ids.length) {
+        ids.forEach(id => {
+            document.getElementById(id).classList.add('invalid');
+            document.getElementById(`${id}-err`).textContent = errors[id];
+        });
+        document.getElementById(ids[0]).focus();
+        return;
+    }
+    const last = parseInt(localStorage.getItem(SUGGESTION_LAST_KEY) || '0', 10);
+    if (last && Date.now() - last < SUGGESTION_COOLDOWN_MS) {
+        showSuggestionResult('warn', 'چند لحظه پیش یه پیشنهاد فرستادی؛ یه دقیقه صبر کن و دوباره امتحان کن.', false);
+        return;
+    }
+
+    const btn = document.getElementById('btn-submit-suggestion');
+    suggestionSending = true;
+    btn.disabled = true;
+    btn.textContent = 'در حال ارسال...';
+    const result = await sendSuggestion(f);
+    suggestionSending = false;
+    btn.disabled = false;
+    btn.textContent = 'ارسال پیشنهاد';
+
+    if (result.ok) {
+        localStorage.setItem(SUGGESTION_LAST_KEY, String(Date.now()));
+        AudioEngine.success();
+        showSuggestionResult('success', 'ممنون! پیشنهادت با موفقیت ارسال شد 💙', false);
+        ['sg-name', 'sg-idea', 'sg-emojis'].forEach(id => { document.getElementById(id).value = ''; });
+        document.getElementById('sg-idea-count').textContent = '0';
+    } else {
+        AudioEngine.error();
+        const msg = result.reason === 'not-configured'
+            ? 'ارسال مستقیم از داخل بازی هنوز فعال نشده. متنت آماده‌ست؛ کپی کن و توی پیوی بفرست.'
+            : 'ارسال انجام نشد (مشکل اتصال یا سرور). می‌تونی دوباره امتحان کنی یا متن رو کپی کنی و توی پیوی بفرستی.';
+        showSuggestionResult('error', msg, true);
+    }
+}
+
+function setupSuggestionsPage() {
+    document.getElementById('btn-back-suggestions').addEventListener('click', goBackToHome);
+    document.getElementById('btn-submit-suggestion').addEventListener('click', submitSuggestion);
+    document.getElementById('sg-idea').addEventListener('input', e => {
+        document.getElementById('sg-idea-count').textContent = toFaDigits(e.target.value.length);
+    });
+    ['sg-name', 'sg-idea', 'sg-emojis'].forEach(id => {
+        document.getElementById(id).addEventListener('input', e => {
+            e.target.classList.remove('invalid');
+            document.getElementById(`${id}-err`).textContent = '';
+        });
+    });
+    document.getElementById('btn-sg-copy').addEventListener('click', () => copySuggestionTemplate(buildSuggestionText(readSuggestionForm())));
+    document.getElementById('btn-sg-open-pv').addEventListener('click', () => {
+        AudioEngine.tap();
+        openExternalLink((DB.suggestions && DB.suggestions.contactUrl) || SUGGESTIONS_PV_URL);
+    });
+    document.getElementById('btn-open-feedback').addEventListener('click', () => {
+        AudioEngine.tap();
+        openExternalLink(SUGGESTIONS_PV_URL);
+    });
 }
 
 // کپی متن الگو در کلیپ‌بورد. روش اصلی navigator.clipboard (مرورگرهای مدرن،
@@ -1839,6 +1982,7 @@ function checkMedals() {
 function setupEvents() {
     document.getElementById('btn-back-home').addEventListener('click', handleBack);
     document.getElementById('btn-back-levels').addEventListener('click', goBackToHome);
+    setupSuggestionsPage();
     
     // اتصال دکمه بازگشت سخت‌افزاری/سیستمی ایتا به برنامه ما
     if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
@@ -1987,7 +2131,7 @@ function renderChangelog(showAll) {
 
     body.innerHTML = entries.map(entry => `
         <div class="changelog-entry">
-            <div class="changelog-version">نسخه ${entry.version}</div>
+            <div class="changelog-version">${entry.version}</div>
             ${entry.added?.length ? `
                 <ul class="changelog-list">${entry.added.map(t => `<li>✨ ${t}</li>`).join('')}</ul>` : ''}
         </div>`).join('');
@@ -2304,7 +2448,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     StorageManager.load(() => {
         document.getElementById('toggle-theme').checked = GameState.settings.darkMode;
         document.getElementById('toggle-sound').checked = GameState.settings.sound;
-        document.getElementById('settings-version-label').textContent = `نسخه ${APP_VERSION}`;
+        document.getElementById('settings-version-label').textContent = APP_VERSION;
         applyTheme();
         setupEvents();
         renderHome();
