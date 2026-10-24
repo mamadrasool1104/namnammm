@@ -1024,16 +1024,26 @@ input:checked + .slider:before { transform: translateX(20px); }
     background: var(--border-color); color: var(--text-muted); border-color: var(--border-color);
     filter: grayscale(1); opacity: 0.6; box-shadow: none; cursor: not-allowed;
 }
-.level-lock { font-size: 1.3rem; }
+.level-lock { font-size: 1.56rem; line-height: 1; } /* ۲۰٪ بزرگ‌تر از ۱.۳rem؛ داخل مربع می‌ماند */
 .level-stars { display: flex; gap: 2px; direction: ltr; font-size: 0.95rem; line-height: 1; }
 .level-stars .star { color: var(--border-color); }
 .level-stars .star.on { color: var(--ios-orange); }
 .level-stars.locked { opacity: 0.45; }
-.levels-hint-note { text-align: center; color: var(--text-muted); font-size: 0.78rem; margin: 22px 0 8px; }
-.reward-stars { display: flex; justify-content: center; gap: 6px; direction: ltr; font-size: 2rem; margin: 4px 0 14px; }
+.reward-stars-wrap { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0 14px; }
+.reward-stars-wrap.hidden { display: none; }
+.reward-stars { display: flex; justify-content: center; gap: 6px; direction: ltr; font-size: 2rem; margin: 0; }
+.stars-info-btn {
+    width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ios-blue); background: transparent;
+    color: var(--ios-blue); font-family: inherit; font-weight: 800; font-size: 0.95rem; line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.stars-info-btn:active { transform: scale(0.9); }
+.stars-explain { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 12px 14px; margin: 0 0 14px; text-align: right; font-size: 0.88rem; line-height: 1.9; }
+.stars-explain.hidden { display: none; }
+.stars-explain-rules { color: var(--text-muted); font-weight: 600; margin-bottom: 8px; }
+.stars-explain-why { font-weight: 700; color: var(--text-main); }
 .reward-stars .star { color: var(--border-color); }
 .reward-stars .star.on { color: var(--ios-orange); filter: drop-shadow(0 2px 4px rgba(255,149,0,0.45)); }
-.reward-stars.hidden { display: none; }
 
 /* =====================================================
    صفحه‌ی انتقادات و پیشنهادات + آیتم تنظیمات
