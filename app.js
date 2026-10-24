@@ -150,8 +150,17 @@ const CATEGORY_SCORES = {
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 const CHANGELOG_DB = [
+    {
+        version: '1.12.0',
+        added: [
+            'صفحه‌ی انتخاب مرحله با مربع‌های گرد و ۳ ستاره زیر هر مرحله',
+            'ستاره‌ها بر اساس تعداد راهنمای استفاده‌شده: بدون راهنما ۳، تا ۳ بار ۲، بیشتر ۱ ستاره',
+            'مراحل قفل‌دار: با حل هر مرحله، مرحله‌ی بعد باز می‌شود',
+            'هر مرحله فقط یک‌بار امتیاز می‌دهد'
+        ]
+    },
     {
         version: '1.11.0',
         added: [
@@ -2286,7 +2295,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-        const res = await fetch('data.json');
+        const res = await fetch('data.json?v=' + APP_VERSION);
         DB = await res.json();
     } catch (e) {
         DB = { categories: [{ id: "proverbs", name: "ضرب‌المثل‌ها", icon: "🎭", levels: [{ emoji: "👂🏻🚪👂🏻🥅", answer: "یه گوشش دره یه گوشش دروازه" }] }] };
