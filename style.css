@@ -1002,3 +1002,35 @@ input:checked + .slider:before { transform: translateX(20px); }
 }
 .hero-btn:active { transform: scale(0.92); }
 .hero-btn.hidden { display: none; }
+
+
+/* =====================================================
+   صفحه‌ی انتخاب مرحله: مربع‌های گرد + ستاره + قفل
+===================================================== */
+.levels-summary { text-align: center; color: var(--text-muted); font-weight: 600; font-size: 0.92rem; margin: 6px 0 16px; }
+.levels-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 12px; }
+@media (min-width: 420px) { .levels-grid { grid-template-columns: repeat(5, 1fr); } }
+.level-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.level-tile {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; border: 2px solid var(--border-color);
+    background: var(--card-bg); color: var(--text-main); font-family: inherit; font-weight: 800; font-size: 1.25rem;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+    box-shadow: 0 3px 0 var(--border-color); transition: transform 0.1s, box-shadow 0.1s;
+}
+.level-tile:active { transform: translateY(3px); box-shadow: 0 0 0 var(--border-color); }
+.level-tile.current { border-color: var(--ios-blue); box-shadow: 0 3px 0 var(--ios-blue); color: var(--ios-blue); }
+.level-tile.completed { border-color: var(--ios-green); box-shadow: 0 3px 0 var(--ios-green); }
+.level-tile.locked {
+    background: var(--border-color); color: var(--text-muted); border-color: var(--border-color);
+    filter: grayscale(1); opacity: 0.6; box-shadow: none; cursor: not-allowed;
+}
+.level-lock { font-size: 1.3rem; }
+.level-stars { display: flex; gap: 2px; direction: ltr; font-size: 0.95rem; line-height: 1; }
+.level-stars .star { color: var(--border-color); }
+.level-stars .star.on { color: var(--ios-orange); }
+.level-stars.locked { opacity: 0.45; }
+.levels-hint-note { text-align: center; color: var(--text-muted); font-size: 0.78rem; margin: 22px 0 8px; }
+.reward-stars { display: flex; justify-content: center; gap: 6px; direction: ltr; font-size: 2rem; margin: 4px 0 14px; }
+.reward-stars .star { color: var(--border-color); }
+.reward-stars .star.on { color: var(--ios-orange); filter: drop-shadow(0 2px 4px rgba(255,149,0,0.45)); }
+.reward-stars.hidden { display: none; }
