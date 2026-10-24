@@ -1597,6 +1597,20 @@ function recordLevelStars(catId, idx) {
     s.stars = calcStars(s.hints || 0);
     return s.stars;
 }
+// متن توضیح ستاره‌ها (با کلیک روی ❗ در پنجره‌ی پایان مرحله)
+function starsExplanationHtml(catId, idx) {
+    const hints = getLevelHints(catId, idx);
+    const stars = getLevelStars(catId, idx);
+    const why = hints === 0
+        ? 'در این مرحله از هیچ راهنمایی استفاده نکردی، برای همین ۳ ستاره گرفتی.'
+        : `در این مرحله ${toFaDigits(hints)} بار از راهنما استفاده کردی، برای همین ${toFaDigits(stars)} ستاره گرفتی.`;
+    return `<div class="stars-explain-rules">
+        <div>⭐⭐⭐ بدون استفاده از راهنما</div>
+        <div>⭐⭐ ۱ تا ۳ بار استفاده از راهنما</div>
+        <div>⭐ بیشتر از ۳ بار استفاده از راهنما</div>
+    </div><div class="stars-explain-why">${why}</div>`;
+}
+
 function starsMarkup(n) {
     let out = '';
     for (let i = 1; i <= 3; i++) out += `<span class="star ${i <= n ? 'on' : ''}">★</span>`;
@@ -1619,10 +1633,8 @@ function renderLevelSelect() {
     if (!cat) return;
     document.getElementById('levels-score').textContent = GameState.globalScore;
     const done = (GameState.progress[cat.id] || []).filter(i => i < cat.levels.length).length;
-    let starSum = 0;
-    cat.levels.forEach((_, i) => { starSum += getLevelStars(cat.id, i); });
     document.getElementById('levels-summary').textContent =
-        `${toFaDigits(done)} از ${toFaDigits(cat.levels.length)} مرحله · ⭐ ${toFaDigits(starSum)} از ${toFaDigits(cat.levels.length * 3)}`;
+        `${toFaDigits(done)} تا ${toFaDigits(cat.levels.length)}`;
 
     const grid = document.getElementById('levels-grid');
     grid.innerHTML = '';
@@ -1937,14 +1949,16 @@ function checkWin() {
 
         document.getElementById('reward-base-score').textContent =
             (base > 0) ? `+${base}` : (GameState.isDailyChallenge ? '۰' : '۰ (قبلاً دریافت شده)');
-        const starsBox = document.getElementById('reward-stars');
-        if (starsBox) {
-            if (GameState.isDailyChallenge) {
-                starsBox.classList.add('hidden');
-            } else {
-                starsBox.innerHTML = starsMarkup(stars);
-                starsBox.classList.remove('hidden');
-            }
+        const starsWrap = document.getElementById('reward-stars-wrap');
+        const explainBox = document.getElementById('stars-explain');
+        explainBox.classList.add('hidden');
+        document.getElementById('btn-stars-info').setAttribute('aria-expanded', 'false');
+        if (GameState.isDailyChallenge) {
+            starsWrap.classList.add('hidden');
+        } else {
+            document.getElementById('reward-stars').innerHTML = starsMarkup(stars);
+            explainBox.innerHTML = starsExplanationHtml(GameState.activeCategory.id, GameState.activeLevelIndex);
+            starsWrap.classList.remove('hidden');
         }
         
         document.getElementById('modal-success').classList.remove('hidden');
@@ -1983,6 +1997,12 @@ function setupEvents() {
     document.getElementById('btn-back-home').addEventListener('click', handleBack);
     document.getElementById('btn-back-levels').addEventListener('click', goBackToHome);
     setupSuggestionsPage();
+    document.getElementById('btn-stars-info').addEventListener('click', () => {
+        AudioEngine.tap();
+        const box = document.getElementById('stars-explain');
+        const open = box.classList.toggle('hidden') === false;
+        document.getElementById('btn-stars-info').setAttribute('aria-expanded', String(open));
+    });
     
     // اتصال دکمه بازگشت سخت‌افزاری/سیستمی ایتا به برنامه ما
     if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
