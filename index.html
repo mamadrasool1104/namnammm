@@ -136,7 +136,6 @@
         <main class="game-container levels-container">
             <div class="levels-summary" id="levels-summary"></div>
             <div class="levels-grid" id="levels-grid"></div>
-            <p class="levels-hint-note">⭐⭐⭐ بدون راهنما · ⭐⭐ تا ۳ راهنما · ⭐ بیشتر از ۳ راهنما</p>
         </main>
     </div>
 
@@ -326,7 +325,11 @@
             <div class="reward-box">
                 <span class="reward-row">🪙 امتیاز مرحله: <strong id="reward-base-score">+10</strong></span>
             </div>
-            <div class="reward-stars hidden" id="reward-stars"></div>
+            <div class="reward-stars-wrap hidden" id="reward-stars-wrap">
+                <div class="reward-stars" id="reward-stars"></div>
+                <button type="button" class="stars-info-btn" id="btn-stars-info" aria-label="توضیح ستاره‌ها" aria-expanded="false">!</button>
+            </div>
+            <div class="stars-explain hidden" id="stars-explain"></div>
             <button id="btn-next-level" class="ios-btn success-btn w-100">ادامه بازی 🚀</button>
         </div>
     </div>
