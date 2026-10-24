@@ -250,6 +250,13 @@ const GameState = {
     globalScore: 0,
     totalEarned: 0, // مجموع کل امتیازی که تا الان کسب شده (برخلاف globalScore که با خرج راهنما کم می‌شود)
     progress: {},
+    // levelStats: آمار هر مرحله به‌صورت جدا از progress (تا ساختار قدیمی progress
+    // که فقط آرایه‌ی اندیس مرحله‌های حل‌شده است دست‌نخورده بماند):
+    //   { [categoryId]: { [levelIndex]: { hints: تعداد راهنمای استفاده‌شده, stars: ۱ تا ۳ (بعد از حل) } } }
+    // مرحله‌ی حل‌شده‌ای که در levelStats رکوردی ندارد (کاربران قبل از این آپدیت)
+    // با ۳ ستاره نمایش داده می‌شود. ⚠️ ترتیب مرحله‌ها در data.json را عوض
+    // نکن، فقط به انتهای هر دسته اضافه کن.
+    levelStats: {},
     unlockedMedals: [],
     // gender: null | 'boy' | 'girl'
     // avatarId: رزرو شده برای انتخاب عکس پروفایل در آینده (فعلاً همیشه null)
@@ -491,6 +498,7 @@ const StorageManager = {
             globalScore: GameState.globalScore,
             totalEarned: GameState.totalEarned,
             progress: GameState.progress,
+            levelStats: GameState.levelStats,
             unlockedMedals: GameState.unlockedMedals,
             settings: GameState.settings,
             dailyChallenge: GameState.dailyChallenge,
@@ -530,6 +538,7 @@ const StorageManager = {
                 // ناگهان قفل نشود.
                 GameState.totalEarned = typeof data.totalEarned === 'number' ? data.totalEarned : (data.globalScore || 0);
                 GameState.progress = data.progress || {};
+                GameState.levelStats = (data.levelStats && typeof data.levelStats === 'object') ? data.levelStats : {};
                 GameState.unlockedMedals = data.unlockedMedals || [];
                 GameState.settings = { ...GameState.settings, ...(data.settings || {}) };
                 GameState.dailyChallenge = data.dailyChallenge || { lastCompletedDate: null, completedCount: 0 };
@@ -944,7 +953,7 @@ function renderHome() {
                 ${isLocked ? '' : `<div class="progress-track"><div class="progress-fill" style="width: ${perc}%"></div></div>`}
             </div>`;
         if (!isLocked) {
-            div.addEventListener('click', () => { AudioEngine.tap(); requireChannelJoin(() => startCategory(cat)); });
+            div.addEventListener('click', () => { AudioEngine.tap(); requireChannelJoin(() => openLevelSelect(cat)); });
         }
         catContainer.appendChild(div);
     });
@@ -1387,19 +1396,135 @@ function computeDifficulty(levelData, isWordMode) {
     return 'hard';
 }
 
-function startCategory(category) {
+// =====================================================
+// مراحل، قفل مراحل و ستاره‌ها
+// =====================================================
+// قواعد:
+//  • مرحله‌ی اول هر دسته همیشه باز است؛ مرحله‌ی i+1 فقط وقتی باز می‌شود که
+//    مرحله‌ی i حل شده باشد (یا خودش قبلاً حل شده باشد).
+//  • ستاره بر اساس تعداد راهنمای استفاده‌شده در همان مرحله:
+//    ۰ بار = ۳ ستاره، ۱ تا ۳ بار = ۲ ستاره، بیشتر از ۳ بار = ۱ ستاره.
+//  • این قواعد در منطق (renderLevel / checkWin / useHint) اعمال می‌شوند،
+//    نه فقط در ظاهر صفحه‌ی انتخاب مرحله.
+const toFaDigits = n => String(n).replace(/\d/g, x => '۰۱۲۳۴۵۶۷۸۹'[x]);
+
+function isLevelCompleted(catId, idx) {
+    return (GameState.progress[catId] || []).includes(idx);
+}
+function isLevelUnlocked(category, idx) {
+    if (idx < 0 || idx >= category.levels.length) return false;
+    if (idx === 0) return true;
+    return isLevelCompleted(category.id, idx) || isLevelCompleted(category.id, idx - 1);
+}
+function getLevelStat(catId, idx) {
+    const cat = GameState.levelStats[catId];
+    return (cat && cat[idx]) || null;
+}
+function getLevelHints(catId, idx) {
+    const s = getLevelStat(catId, idx);
+    return s && typeof s.hints === 'number' ? s.hints : 0;
+}
+function calcStars(hints) {
+    if (hints <= 0) return 3;
+    if (hints <= 3) return 2;
+    return 1;
+}
+function getLevelStars(catId, idx) {
+    if (!isLevelCompleted(catId, idx)) return 0;
+    const s = getLevelStat(catId, idx);
+    return s && typeof s.stars === 'number' ? s.stars : 3; // کاربران قدیمی بدون رکورد: ۳ ستاره
+}
+function recordLevelHint(catId, idx) {
+    if (!GameState.levelStats[catId]) GameState.levelStats[catId] = {};
+    const s = GameState.levelStats[catId][idx] || (GameState.levelStats[catId][idx] = { hints: 0 });
+    s.hints = (s.hints || 0) + 1;
+}
+function recordLevelStars(catId, idx) {
+    if (!GameState.levelStats[catId]) GameState.levelStats[catId] = {};
+    const s = GameState.levelStats[catId][idx] || (GameState.levelStats[catId][idx] = { hints: 0 });
+    s.stars = calcStars(s.hints || 0);
+    return s.stars;
+}
+function starsMarkup(n) {
+    let out = '';
+    for (let i = 1; i <= 3; i++) out += `<span class="star ${i <= n ? 'on' : ''}">★</span>`;
+    return out;
+}
+
+function openLevelSelect(category) {
     GameState.isDailyChallenge = false;
     GameState.activeCategory = category;
+    document.getElementById('levels-category-title').textContent = category.name;
+    renderLevelSelect();
+    showScreen('screen-levels');
+    if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
+        window.Eitaa.WebApp.BackButton.show();
+    }
+}
+
+function renderLevelSelect() {
+    const cat = GameState.activeCategory;
+    if (!cat) return;
+    document.getElementById('levels-score').textContent = GameState.globalScore;
+    const done = (GameState.progress[cat.id] || []).filter(i => i < cat.levels.length).length;
+    let starSum = 0;
+    cat.levels.forEach((_, i) => { starSum += getLevelStars(cat.id, i); });
+    document.getElementById('levels-summary').textContent =
+        `${toFaDigits(done)} از ${toFaDigits(cat.levels.length)} مرحله · ⭐ ${toFaDigits(starSum)} از ${toFaDigits(cat.levels.length * 3)}`;
+
+    const grid = document.getElementById('levels-grid');
+    grid.innerHTML = '';
+    cat.levels.forEach((_, i) => {
+        const unlocked = isLevelUnlocked(cat, i);
+        const completed = isLevelCompleted(cat.id, i);
+        const stars = getLevelStars(cat.id, i);
+        const cell = document.createElement('div');
+        cell.className = 'level-cell';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `level-tile ${!unlocked ? 'locked' : (completed ? 'completed' : 'current')}`;
+        btn.setAttribute('aria-label', unlocked ? `مرحله ${toFaDigits(i + 1)}` : `مرحله ${toFaDigits(i + 1)} قفل است`);
+        btn.innerHTML = unlocked ? `<span class="level-num">${toFaDigits(i + 1)}</span>` : '<span class="level-lock">🔒</span>';
+        btn.addEventListener('click', () => {
+            if (!isLevelUnlocked(cat, i)) {
+                AudioEngine.error();
+                showToast('🔒', 'اول مرحله‌ی قبلی رو حل کن تا این مرحله باز بشه');
+                return;
+            }
+            AudioEngine.tap();
+            startLevel(cat, i);
+        });
+        const starsEl = document.createElement('div');
+        starsEl.className = `level-stars ${!unlocked ? 'locked' : ''}`;
+        starsEl.innerHTML = starsMarkup(stars);
+        cell.appendChild(btn);
+        cell.appendChild(starsEl);
+        grid.appendChild(cell);
+    });
+}
+
+// دکمه‌ی بازگشت: از صفحه‌ی بازی (دسته‌ی عادی) → صفحه‌ی انتخاب مرحله؛ از
+// بقیه‌ی صفحه‌ها → صفحه‌ی اصلی.
+function handleBack() {
+    const active = document.querySelector('.screen.active');
+    const id = active ? active.id : '';
+    if (id === 'screen-game' && !GameState.isDailyChallenge && GameState.activeCategory
+        && GameState.activeCategory.id !== 'daily') {
+        AudioEngine.tap();
+        openLevelSelect(GameState.activeCategory);
+        return;
+    }
+    goBackToHome();
+}
+
+function startLevel(category, index) {
+    if (!isLevelUnlocked(category, index)) { openLevelSelect(category); return; }
+    GameState.isDailyChallenge = false;
+    GameState.activeCategory = category;
+    GameState.activeLevelIndex = index;
     document.getElementById('game-category-title').textContent = category.name;
     document.getElementById('daily-type-badge').classList.add('hidden');
-    
-    let completedArr = GameState.progress[category.id] || [];
-    let nextIndex = 0;
-    for(let i=0; i < category.levels.length; i++) {
-        if(!completedArr.includes(i)) { nextIndex = i; break; }
-    }
-    GameState.activeLevelIndex = nextIndex;
-    
+
     // نمایش هشدار برای بخش‌هایی که ماهیت محاوره‌ای/عامیانه دارند
     const noticeEl = document.getElementById('category-notice');
     if (category.id === 'proverbs' || category.id === 'idioms') {
@@ -1412,15 +1537,31 @@ function startCategory(category) {
     showScreen('screen-game');
     renderLevel();
 
-    // فعال‌سازی دکمه بازگشت سیستمی ایتا
     if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
         window.Eitaa.WebApp.BackButton.show();
     }
 }
 
+// «ادامه» از صفحه‌ی اصلی: اولین مرحله‌ی حل‌نشده؛ اگر همه حل شده باشند
+// به‌جای شروع دوباره (که قبلاً امتیاز تکراری می‌داد) صفحه‌ی انتخاب مرحله باز می‌شود.
+function startCategory(category) {
+    const completedArr = GameState.progress[category.id] || [];
+    let nextIndex = -1;
+    for (let i = 0; i < category.levels.length; i++) {
+        if (!completedArr.includes(i)) { nextIndex = i; break; }
+    }
+    if (nextIndex === -1) { openLevelSelect(category); return; }
+    startLevel(category, nextIndex);
+}
+
 function renderLevel() {
     const cat = GameState.activeCategory;
-    if (GameState.activeLevelIndex >= cat.levels.length) GameState.activeLevelIndex = 0;
+    if (!GameState.isDailyChallenge) {
+        // گارد منطقی: ورود به مرحله‌ی قفل یا خارج از محدوده ممنوع است
+        if (!isLevelUnlocked(cat, GameState.activeLevelIndex)) { openLevelSelect(cat); return; }
+    } else if (GameState.activeLevelIndex >= cat.levels.length) {
+        GameState.activeLevelIndex = 0;
+    }
 
     const levelData = cat.levels[GameState.activeLevelIndex];
     const answer = levelData.answer.replace(/ي/g, "ی").replace(/ك/g, "ک").trim();
@@ -1558,7 +1699,12 @@ function handleSlotClick(slotId) {
 }
 
 function useHint() {
-    if (GameState.globalScore < HINT_COST) { showToast('🪙', 'امتیاز کافی نیست!'); return; }
+    // در مرحله‌ی حل‌شده (تکرار برای تفریح) راهنما رایگان است و روی ستاره‌ها
+    // یا امتیاز اثری ندارد.
+    const catId = GameState.activeCategory && GameState.activeCategory.id;
+    const replay = !GameState.isDailyChallenge && isLevelCompleted(catId, GameState.activeLevelIndex);
+    const cost = replay ? 0 : HINT_COST;
+    if (GameState.globalScore < cost) { showToast('🪙', 'امتیاز کافی نیست!'); return; }
     const candidates = GameState.slots.filter(s => !s.locked && s.filledWith !== s.char);
     if (candidates.length === 0) return;
     
@@ -1581,7 +1727,8 @@ function useHint() {
     }
 
     if (validKeyId !== -1) {
-        GameState.globalScore -= HINT_COST;
+        GameState.globalScore -= cost;
+        if (!GameState.isDailyChallenge && !replay) recordLevelHint(catId, GameState.activeLevelIndex);
         target.filledWith = target.char;
         target.keyId = validKeyId;
         target.locked = true;
@@ -1600,31 +1747,53 @@ function checkWin() {
     if (isCorrect) {
         AudioEngine.success();
         let base;
+        let firstTime = false;
+        let stars = 0;
 
         if (GameState.isDailyChallenge) {
-            base = DAILY_BASE_SCORE;
-            GameState.globalScore += base;
-            GameState.totalEarned += base;
             const todayKey = getTodayKey();
             if (GameState.dailyChallenge.lastCompletedDate !== todayKey) {
+                base = DAILY_BASE_SCORE;
+                GameState.globalScore += base;
+                GameState.totalEarned += base;
                 GameState.dailyChallenge.completedCount = (GameState.dailyChallenge.completedCount || 0) + 1;
+            } else {
+                base = 0; // گارد منطقی: چالش روزانه در هر روز فقط یک‌بار امتیاز می‌دهد
             }
             GameState.dailyChallenge.lastCompletedDate = todayKey;
         } else {
-            const catId = GameState.activeCategory.id;
-            base = CATEGORY_SCORES[catId] ?? BASE_SCORE;
-            GameState.globalScore += base;
-            GameState.totalEarned += base;
-            if (!GameState.progress[catId]) GameState.progress[catId] = [];
-            if (!GameState.progress[catId].includes(GameState.activeLevelIndex)) {
-                GameState.progress[catId].push(GameState.activeLevelIndex);
+            const cat = GameState.activeCategory;
+            const catId = cat.id;
+            const idx = GameState.activeLevelIndex;
+            // گارد منطقی: هر مرحله فقط یک‌بار امتیاز می‌دهد و فقط اگر باز باشد
+            if (isLevelCompleted(catId, idx) || !isLevelUnlocked(cat, idx)) {
+                base = 0;
+            } else {
+                base = CATEGORY_SCORES[catId] ?? BASE_SCORE;
+                GameState.globalScore += base;
+                GameState.totalEarned += base;
+                if (!GameState.progress[catId]) GameState.progress[catId] = [];
+                GameState.progress[catId].push(idx);
+                recordLevelStars(catId, idx);
+                firstTime = true;
             }
+            stars = getLevelStars(catId, idx);
         }
         
         checkMedals();
         StorageManager.save();
 
-        document.getElementById('reward-base-score').textContent = `+${base}`;
+        document.getElementById('reward-base-score').textContent =
+            (base > 0) ? `+${base}` : (GameState.isDailyChallenge ? '۰' : '۰ (قبلاً دریافت شده)');
+        const starsBox = document.getElementById('reward-stars');
+        if (starsBox) {
+            if (GameState.isDailyChallenge) {
+                starsBox.classList.add('hidden');
+            } else {
+                starsBox.innerHTML = starsMarkup(stars);
+                starsBox.classList.remove('hidden');
+            }
+        }
         
         document.getElementById('modal-success').classList.remove('hidden');
     } else {
@@ -1659,11 +1828,12 @@ function checkMedals() {
    6. Bootstrapping
 ========================================= */
 function setupEvents() {
-    document.getElementById('btn-back-home').addEventListener('click', goBackToHome);
+    document.getElementById('btn-back-home').addEventListener('click', handleBack);
+    document.getElementById('btn-back-levels').addEventListener('click', goBackToHome);
     
     // اتصال دکمه بازگشت سخت‌افزاری/سیستمی ایتا به برنامه ما
     if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
-        window.Eitaa.WebApp.BackButton.onClick(goBackToHome);
+        window.Eitaa.WebApp.BackButton.onClick(handleBack);
     }
 
     document.getElementById('btn-next-level').addEventListener('click', () => {
@@ -1674,7 +1844,13 @@ function setupEvents() {
             goBackToHome();
             return;
         }
-        GameState.activeLevelIndex++;
+        const cat = GameState.activeCategory;
+        const next = GameState.activeLevelIndex + 1;
+        if (next >= cat.levels.length) {
+            openLevelSelect(cat); // آخرین مرحله بود؛ دیگر به ابتدا برنمی‌گردیم
+            return;
+        }
+        GameState.activeLevelIndex = next;
         renderLevel();
     });
     
