@@ -1024,15 +1024,19 @@ input:checked + .slider:before { transform: translateX(20px); }
     background: var(--border-color); color: var(--text-muted); border-color: var(--border-color);
     filter: grayscale(1); opacity: 0.6; box-shadow: none; cursor: not-allowed;
 }
-.level-lock { font-size: 3.12rem; line-height: 1; } /* دو برابر قبل (۱.۵۶rem)؛ داخل مربع می‌ماند */
-@supports (container-type: inline-size) {
-    .level-tile { container-type: inline-size; }
-    .level-lock { font-size: 62cqw; } /* متناسب با عرض مربع، تا در هر صفحه‌ای داخل کادر بماند */
-}
-.level-stars { display: flex; gap: 2px; direction: ltr; font-size: 0.95rem; line-height: 1; }
+.level-lock { font-size: 2.73rem; line-height: 1; } /* قفل: ۳۵٪ مربع */
+.level-num { font-size: 2.2rem; line-height: 1; }
+.level-stars { display: flex; gap: 1px; direction: ltr; font-size: 1.4rem; line-height: 1; }
 .level-stars .star { color: var(--border-color); }
 .level-stars .star.on { color: var(--ios-orange); }
 .level-stars.locked { opacity: 0.45; }
+@supports (container-type: inline-size) {
+    /* اندازه‌ها نسبت به عرض مربع/خانه‌ی مرحله‌اند تا در هر گوشی داخل کادر بمانند */
+    .level-tile, .level-cell { container-type: inline-size; }
+    .level-lock { font-size: 54cqw; }
+    .level-num { font-size: 50cqw; }
+    .level-stars { font-size: 29cqw; }
+}
 .reward-stars-wrap { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0 14px; }
 .reward-stars-wrap.hidden { display: none; }
 .reward-stars { display: flex; justify-content: center; gap: 6px; direction: ltr; font-size: 2rem; margin: 0; }
