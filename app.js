@@ -1648,7 +1648,7 @@ function renderLevelSelect() {
         btn.type = 'button';
         btn.className = `level-tile ${!unlocked ? 'locked' : (completed ? 'completed' : 'current')}`;
         btn.setAttribute('aria-label', unlocked ? `مرحله ${toFaDigits(i + 1)}` : `مرحله ${toFaDigits(i + 1)} قفل است`);
-        btn.innerHTML = unlocked ? `<span class="level-num">${toFaDigits(i + 1)}</span>` : '<span class="level-lock">🔒</span>';
+        btn.innerHTML = unlocked ? `<span class="level-num">${i + 1}</span>` : '<span class="level-lock">🔒</span>';
         btn.addEventListener('click', () => {
             if (!isLevelUnlocked(cat, i)) {
                 AudioEngine.error();
