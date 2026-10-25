@@ -1024,7 +1024,11 @@ input:checked + .slider:before { transform: translateX(20px); }
     background: var(--border-color); color: var(--text-muted); border-color: var(--border-color);
     filter: grayscale(1); opacity: 0.6; box-shadow: none; cursor: not-allowed;
 }
-.level-lock { font-size: 1.56rem; line-height: 1; } /* ۲۰٪ بزرگ‌تر از ۱.۳rem؛ داخل مربع می‌ماند */
+.level-lock { font-size: 3.12rem; line-height: 1; } /* دو برابر قبل (۱.۵۶rem)؛ داخل مربع می‌ماند */
+@supports (container-type: inline-size) {
+    .level-tile { container-type: inline-size; }
+    .level-lock { font-size: 62cqw; } /* متناسب با عرض مربع، تا در هر صفحه‌ای داخل کادر بماند */
+}
 .level-stars { display: flex; gap: 2px; direction: ltr; font-size: 0.95rem; line-height: 1; }
 .level-stars .star { color: var(--border-color); }
 .level-stars .star.on { color: var(--ios-orange); }
