@@ -30,7 +30,12 @@ function resolveEitaaUserId(rawUser) {
 const SUGGESTIONS_BUCKET_ID = KVDB_BUCKET_ID;
 const SUGGESTIONS_PV_URL = 'https://eitaa.com/ferstadeh';
 const PERSIAN_ALPHABET = "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی";
-const HINT_COST = 15;
+// ⚙️ اقتصاد سکه (نسخه‌ی ۲): همه‌ی پاداش‌ها و هزینه‌ها ۱۰ برابر نسخه‌ی ۱ هستند.
+// ECONOMY_VERSION داخل خود رکورد کاربر (settings.economyVersion) ذخیره می‌شود
+// تا مهاجرت ×۱۰ موجودی قدیمی دقیقاً یک‌بار برای هر کاربر انجام شود.
+const ECONOMY_VERSION = 2;
+const ECONOMY_MULTIPLIER = 10;
+const HINT_COST = 150;
 // این دو تا هنوز برای کارت‌های «کانال‌های ما» در پایین صفحه استفاده می‌شوند.
 const TECH_NOUR_LINK = 'https://eitaa.com/Tech_nour';
 const AVAY_KHIYAL_LINK = 'https://eitaa.com/avay_khiyal';
@@ -139,25 +144,34 @@ window.debugRotation = function (customDate) {
     return info;
 };
 
-const BASE_SCORE = 10;
-const DAILY_BASE_SCORE = 50;
+const BASE_SCORE = 100;
+const DAILY_BASE_SCORE = 500;
 // فاصله‌ی چرخش خودکار کارت‌های «کانال‌های ما»
 const PROMO_ROTATE_INTERVAL_MS = 5000;
 
 // امتیاز پایه‌ی هر دسته؛ اگر دسته‌ای اینجا نبود از BASE_SCORE استفاده می‌شود.
 // (درخواست: امتیاز ضرب‌المثل‌ها حداقل ۲۵ باشد)
 const CATEGORY_SCORES = {
-    proverbs: 25,
-    movies: 10,
-    countries: 10
+    proverbs: 250,
+    movies: 100,
+    countries: 100
 };
 
 // نسخه فعلی برنامه + لیست تغییرات هر نسخه. هر وقت آپدیت جدیدی منتشر کردی،
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.14.0';
 const CHANGELOG_DB = [
+    {
+        version: '1.14.0',
+        added: [
+            'اقتصاد سکه‌ها ۱۰ برابر شد: پاداش مراحل، چالش روزانه، امتیاز روزانه و پاداش کانال‌ها',
+            'هزینه‌ی راهنما هم ۱۰ برابر شد (۱۵۰ امتیاز)',
+            'موجودی و مجموع امتیاز قبلی شما هم دقیقاً ۱۰ برابر شد',
+            'مدال «ثروتمند» با مقیاس جدید: ۵۰٬۰۰۰ امتیاز'
+        ]
+    },
     {
         version: '1.13.0',
         added: [
@@ -323,9 +337,9 @@ const MEDALS_DB = [
     // نکته: عمداً از totalEarned استفاده می‌کنیم نه globalScore، چون globalScore با
     // خرج کردن روی راهنما کم می‌شود و ممکن بود کاربری که واقعاً ۵۰۰۰ امتیاز کسب
     // کرده ولی خرج کرده، هیچ‌وقت این مدال را نگیرد.
-    { id: 'rich', name: 'ثروتمند', icon: '💎', desc: '۵۰۰۰ امتیاز کسب کن',
-        check: (state) => state.totalEarned >= 5000,
-        progress: (state) => `${Math.min(state.totalEarned, 5000)}/5000` },
+    { id: 'rich', name: 'ثروتمند', icon: '💎', desc: '۵۰٬۰۰۰ امتیاز کسب کن',
+        check: (state) => state.totalEarned >= 50000,
+        progress: (state) => `${Math.min(state.totalEarned, 50000)}/50000` },
     { id: 'daily_fan', name: 'اهل چالش روزانه', icon: '🔥', desc: '۱۰ چالش روزانه را حل کن',
         check: (state) => (state.dailyChallenge?.completedCount || 0) >= 10,
         progress: (state) => `${Math.min(state.dailyChallenge?.completedCount || 0, 10)}/10` },
@@ -519,6 +533,7 @@ const StorageManager = {
         const payload = JSON.stringify({
             globalScore: GameState.globalScore,
             totalEarned: GameState.totalEarned,
+            economyVersion: ECONOMY_VERSION,
             progress: GameState.progress,
             levelStats: GameState.levelStats,
             unlockedMedals: GameState.unlockedMedals,
@@ -531,6 +546,27 @@ const StorageManager = {
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
             try { await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`, { method: 'PUT', body: payload }); } catch (e) {}
         }
+    },
+    // ×۱۰ کردن موجودی و مجموع امتیاز یک رکورد قدیمی. ورودی را تغییر نمی‌دهد؛
+    // اگر نتیجه معتبر نباشد null برمی‌گرداند (و پرچم ثبت نمی‌شود تا بعداً دوباره
+    // امتحان شود). قبل از هر تغییر، نسخه‌ی پشتیبان رکورد اصلی ذخیره می‌شود.
+    migrateEconomy: function(data, rawRecord) {
+        const gs = Number(data.globalScore) || 0;
+        const te = typeof data.totalEarned === 'number' ? data.totalEarned : gs;
+        const newGs = gs * ECONOMY_MULTIPLIER;
+        const newTe = te * ECONOMY_MULTIPLIER;
+        // بررسی صحت: عدد صحیح و ایمن، و دقیقاً ۱۰ برابر مقدار قبلی
+        if (![gs, te, newGs, newTe].every(Number.isFinite) || !Number.isSafeInteger(newGs) || !Number.isSafeInteger(newTe)
+            || newGs !== gs * 10 || newTe !== te * 10 || gs < 0 || te < 0) {
+            console.error('مهاجرت اقتصاد انجام نشد: مقدار نامعتبر', gs, te);
+            return null;
+        }
+        try { localStorage.setItem(this.getKey() + '_backup_pre_x10', rawRecord); } catch (e) {}
+        if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
+            // پشتیبان ابری (best-effort؛ پشتیبان لوکال بالا تضمینی است)
+            try { fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}_backup_pre_x10`, { method: 'PUT', body: rawRecord }); } catch (e) {}
+        }
+        return { globalScore: newGs, totalEarned: newTe };
     },
     load: async function(callback) {
         let finalData = null;
@@ -554,11 +590,22 @@ const StorageManager = {
         if (finalData) {
             try {
                 const data = JSON.parse(finalData);
+                // --- مهاجرت یک‌باره‌ی اقتصاد (×۱۰) ---
+                // پرچم هم در settings (که نسخه‌های قدیمیِ کش‌شده هم عیناً نگه می‌دارند) و هم
+                // در سطح بالای رکورد خوانده می‌شود. باید «قبل از» merge شدن settings با
+                // مقادیر پیش‌فرض بررسی شود، وگرنه نبودنِ پرچم دیده نمی‌شود.
+                const alreadyMigrated = Math.max(Number(data.economyVersion) || 0,
+                    Number(data.settings && data.settings.economyVersion) || 0) >= ECONOMY_VERSION;
+                const migrated = alreadyMigrated ? null : this.migrateEconomy(data, finalData);
                 GameState.globalScore = data.globalScore || 0;
                 // برای کسانی که از قبل پیشرفت داشته‌اند و totalEarned ذخیره‌شده ندارند،
                 // globalScore فعلی را به‌عنوان تخمین اولیه در نظر می‌گیریم تا مدال «ثروتمند»
                 // ناگهان قفل نشود.
                 GameState.totalEarned = typeof data.totalEarned === 'number' ? data.totalEarned : (data.globalScore || 0);
+                if (migrated) {
+                    GameState.globalScore = migrated.globalScore;
+                    GameState.totalEarned = migrated.totalEarned;
+                }
                 GameState.progress = data.progress || {};
                 GameState.levelStats = (data.levelStats && typeof data.levelStats === 'object') ? data.levelStats : {};
                 GameState.unlockedMedals = data.unlockedMedals || [];
@@ -574,6 +621,8 @@ const StorageManager = {
                     channels: (data.rewards && data.rewards.channels) || {}
                 };
                 this.ready = true;
+                if (migrated || alreadyMigrated) GameState.settings.economyVersion = ECONOMY_VERSION;
+                if (migrated) this.save(); // نتیجه‌ی مهاجرت فوراً (لوکال + کلاد) ذخیره شود
             } catch (e) {
                 // دیتا وجود داشت ولی خراب/ناسازگار بود؛ به‌جای رفتن به مقادیر
                 // پیش‌فرض و ذخیره‌ی صفر روی آن، save() را قفل نگه می‌داریم تا
@@ -593,6 +642,7 @@ const StorageManager = {
             // نه دیتای کلاود بود نه لوکال، و کلاود هم واقعاً ۴۰۴/غیرفعال بود
             // (نه خطای شبکه) → این واقعاً یک کاربر جدید است، صفر بودن درست است.
             this.ready = true;
+            GameState.settings.economyVersion = ECONOMY_VERSION; // کاربر جدید: مستقیم با اقتصاد جدید
         }
         callback();
     }
@@ -2028,6 +2078,7 @@ function setupEvents() {
     });
     
     document.getElementById('btn-hint').addEventListener('click', useHint);
+    document.getElementById('btn-hint').innerHTML = `💡 راهنما (${toFaDigits(HINT_COST)}- امتیاز)`;
 
     document.getElementById('daily-challenge-card').addEventListener('click', () => requireChannelJoin(startDailyChallenge));
 
@@ -2179,8 +2230,8 @@ const REWARD_CONFIG = (typeof window !== 'undefined' && window.REWARD_SETTINGS)
     : { channels: [], rotatingSlot: null };
 
 const REWARD_DAYS_FA = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
-const DAILY_REWARD_MIN = 10;
-const DAILY_REWARD_MAX = 85;
+const DAILY_REWARD_MIN = 100;
+const DAILY_REWARD_MAX = 850;
 
 // همون فرمت YYYY-MM-DD که getTodayKey هم استفاده می‌کند (بر مبنای ساعت محلی دستگاه)
 function getDateKey(d) {
