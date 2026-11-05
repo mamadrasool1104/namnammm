@@ -30,15 +30,27 @@ function resolveEitaaUserId(rawUser) {
 const SUGGESTIONS_BUCKET_ID = KVDB_BUCKET_ID;
 const SUGGESTIONS_PV_URL = 'https://eitaa.com/ferstadeh';
 const PERSIAN_ALPHABET = "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی";
+// حروفی که فقط در جواب‌ها پیدا می‌شوند (آ، ئ). اگر در حروف مزاحم کیبورد نباشند،
+// وجودشان روی کیبورد خودش لو می‌دهد که جزو جواب است؛ پس به مزاحم‌ها هم اضافه شده‌اند.
+const DECOY_ALPHABET = PERSIAN_ALPHABET + "آئ";
+
+// fetch با سقف زمانی: اگر KVDB کند یا فیلتر باشد، بازی نباید روی صفحه‌ی لودینگ
+// گیر کند. بعد از ms میلی‌ثانیه درخواست لغو می‌شود (خطا مثل قطعی شبکه مدیریت می‌شود).
+const CLOUD_TIMEOUT_MS = 8000;
+function fetchWithTimeout(url, opts = {}, ms = CLOUD_TIMEOUT_MS) {
+    if (typeof AbortController === 'undefined') return fetch(url, opts);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
 // ⚙️ اقتصاد سکه (نسخه‌ی ۲): همه‌ی پاداش‌ها و هزینه‌ها ۱۰ برابر نسخه‌ی ۱ هستند.
 // ECONOMY_VERSION داخل خود رکورد کاربر (settings.economyVersion) ذخیره می‌شود
 // تا مهاجرت ×۱۰ موجودی قدیمی دقیقاً یک‌بار برای هر کاربر انجام شود.
 const ECONOMY_VERSION = 2;
 const ECONOMY_MULTIPLIER = 10;
 const HINT_COST = 150;
-// این دو تا هنوز برای کارت‌های «کانال‌های ما» در پایین صفحه استفاده می‌شوند.
+// این لینک هنوز برای کارت‌های «کانال‌های ما» در پایین صفحه استفاده می‌شود.
 const TECH_NOUR_LINK = 'https://eitaa.com/Tech_nour';
-const AVAY_KHIYAL_LINK = 'https://eitaa.com/avay_khiyal';
 
 /* =========================================
    عضویت اجباری چرخشی هفتگی (Weekly Mandatory Channel Rotation)
@@ -58,9 +70,9 @@ const AVAY_KHIYAL_LINK = 'https://eitaa.com/avay_khiyal';
 
 // همه‌ی تنظیمات چرخش، از فایل‌های جداگانه‌ی هر کانال خوانده می‌شود — نه
 // اینجا. برای تغییر دادن کانال‌ها، ترتیب، فعال/غیرفعال کردن، یا تاریخ
-// شروع، به پوشه‌ی config/mandatory-channels/ برو (هر کانال یک فایل جدا،
-// + یک index.js که ترتیب چرخش را مشخص می‌کند). این فایل‌ها باید در
-// index.html قبل از app.js لود شوند.
+// شروع، به فایل‌های index.js (ترتیب چرخش، تاریخ شروع، تک‌نور/رسامیم) و partner.js
+// (کانال همکار) کنار همین فایل برو. این فایل‌ها باید در index.html قبل از
+// app.js لود شوند (الان همین‌طور است).
 //
 // fallback زیر («اگر آن فایل‌ها به هر دلیلی لود نشده بودند») عمداً همان
 // چهار کانال پیش‌فرض را دارد تا اگر یک نفر پوشه‌ی config/ را حذف کرد، بازی
@@ -75,7 +87,6 @@ const ROTATION_CONFIG = (typeof window !== 'undefined' && window.MANDATORY_CHANN
         startDate: '2025-01-06T00:00:00+03:30',
         weeksPerChannel: 1,
         channels: [
-            { id: 'avay_khiyal', type: 'channel', name: 'آواي‌خـــــــــیال', icon: '🕊️', username: 'avay_khiyal', enabled: true },
             { id: 'tech_nour', type: 'channel', name: 'تِک‌نور', icon: '📢', username: 'Tech_nour', enabled: true },
             { id: 'rasa_meme', type: 'channel', name: 'رسامیم', icon: '😂', username: 'Rasa_Meme', enabled: true },
             { id: 'partner', type: 'partner', name: 'آشوب درون | Ashob daron', icon: '📌', username: 'Ashob_daron', enabled: true }
@@ -161,40 +172,28 @@ const CATEGORY_SCORES = {
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.15.0';
 const CHANGELOG_DB = [
     {
-        version: '1.14.0',
+        version: '1.15.0',
         added: [
-            'اقتصاد سکه‌ها ۱۰ برابر شد: پاداش مراحل، چالش روزانه، امتیاز روزانه و پاداش کانال‌ها',
-            'هزینه‌ی راهنما هم ۱۰ برابر شد (۱۵۰ امتیاز)',
-            'موجودی و مجموع امتیاز قبلی شما هم دقیقاً ۱۰ برابر شد',
-            'مدال «ثروتمند» با مقیاس جدید: ۵۰٬۰۰۰ امتیاز'
-        ]
-    },
-    {
-        version: '1.13.0',
-        added: [
-            'صفحه‌ی «انتقادات و پیشنهادات» با فرم ارسال ایده و ایموجی پیشنهادی',
-            'گزینه‌ی «انتقادات و پیشنهادات» در تنظیمات (باز شدن پیوی در ایتا)'
-        ]
-    },
-    {
-        version: '1.12.0',
-        added: [
-            'صفحه‌ی انتخاب مرحله با مربع‌های گرد و ۳ ستاره زیر هر مرحله',
-            'ستاره‌ها بر اساس تعداد راهنمای استفاده‌شده: بدون راهنما ۳، تا ۳ بار ۲، بیشتر ۱ ستاره',
-            'مراحل قفل‌دار: با حل هر مرحله، مرحله‌ی بعد باز می‌شود',
-            'هر مرحله فقط یک‌بار امتیاز می‌دهد'
+            'مرحله‌های جدید در دسته کشورها',
+            'ایموجی‌ها و پاسخ چند معما دقیق‌تر و واضح‌تر شد'
+        ],
+        fixed: [
+            'بارگذاری سریع‌تر و پایدارتر هنگام کندی یا قطعی اینترنت',
+            'همگام‌سازی امن‌تر پیشرفت بین چند دستگاه',
+            'رفع چند باگ جزئی'
         ]
     },
     {
         version: '1.11.0',
         added: [
-            '۱۰ معمای تازه به هر کدام از دسته‌های ضرب‌المثل‌ها، فیلم و سریال و کشورها اضافه شد',
-            '۴۰ معمای تازه به دسته‌ی اصطلاحات اضافه شد',
             'کانال جدید «آشوب درون» به بخش کانال‌های ما اضافه شد',
-            'عکس پروفایل واقعی کانال‌ها در بخش کانال‌های ما نمایش داده می‌شود'
+            'اصلاح بخش ایده‌های شما و اضافه شدن بخش پیشنهاد سوالات',
+            'افزوده شدن بخش انتقادات و پیشنهادات در قسمت تنظیمات',
+            'افزایش سوالات در بخش های مختلف بازی',
+            'رفع باگهای گزارش شده توسط کاربران'
         ]
     },
     {
@@ -358,23 +357,13 @@ const MEDALS_DB = [
 //   type: 'ad'       → کارت تبلیغ، ظاهر و رنگش عمداً متفاوته که کاربر سریع
 //                      بفهمه تبلیغه (badge, desc, iconType, link, buttonText)
 // برای افزودن کانال جدید، فقط یک آبجکت دیگر شبیه پایین به آرایه اضافه کن.
-// theme برای کانال‌ها: 'tech' / 'poetry' / 'meme' (یا خالی برای آبی پیش‌فرض).
+// theme برای کانال‌ها: 'tech' / 'gold' / 'meme' (یا خالی برای آبی پیش‌فرض).
 // iconType باید یکی از کلیدهای PROMO_ICONS باشد (چند خط پایین‌تر همین فایل)؛
 // این آیکون فقط وقتی نمایش داده می‌شود که عکس پروفایل واقعی موجود نباشد.
 // photoKey → کلید مربوطه در channel-photos.js (فایل جدا برای عکس‌های
 // پروفایل)؛ اگر آنجا عکسی برای این کلید ثبت شده باشد همان نمایش داده
 // می‌شود، وگرنه آیکون SVG (iconType) جایگزینش می‌شود.
 const CHANNEL_PROMOS = [
-    {
-        type: 'channel',
-        name: 'آواي‌خـــــــــیال',
-        handle: '@avay_khiyal',
-        desc: 'کانال شعر؛ اگه دلت یه گوشه‌ی آروم برای خوندن شعر می‌خواد، بیا اینجا',
-        iconType: 'poetry',
-        photoKey: 'avay_khiyal',
-        link: AVAY_KHIYAL_LINK,
-        theme: 'poetry'
-    },
     {
         type: 'ad',
         name: 'تبلیغات عمو',
@@ -468,7 +457,7 @@ function populateChannelIcon(container, photoKey, iconType) {
     const img = document.createElement('img');
     img.src = photoUrl;
     img.alt = '';
-    img.loading = 'lazy';
+    img.loading = 'eager'; // عکس‌ها کوچک‌اند (≈۱۰ تا ۳۰ کیلوبایت)؛ lazy باعث تأخیر دیده‌شدنشان می‌شد
     img.decoding = 'async';
     img.addEventListener('error', () => {
         container.innerHTML = getPromoIconMarkup(iconType);
@@ -531,6 +520,7 @@ const StorageManager = {
             return;
         }
         const payload = JSON.stringify({
+            savedAt: Date.now(), // برای انتخاب جدیدترین نسخه بین لوکال و ابر هنگام بارگذاری
             globalScore: GameState.globalScore,
             totalEarned: GameState.totalEarned,
             economyVersion: ECONOMY_VERSION,
@@ -542,10 +532,77 @@ const StorageManager = {
             joinGate: GameState.joinGate,
             rewards: GameState.rewards
         });
-        localStorage.setItem(this.getKey(), payload);
+        try { localStorage.setItem(this.getKey(), payload); } catch (e) {}
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
-            try { await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`, { method: 'PUT', body: payload }); } catch (e) {}
+            const dirtyKey = this.getKey() + '_cloud_dirty';
+            try {
+                const res = await fetchWithTimeout(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`, { method: 'PUT', body: payload });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                try { localStorage.removeItem(dirtyKey); } catch (e) {}
+            } catch (e) {
+                // ذخیره‌ی ابری ناموفق بود؛ نسخه‌ی لوکال جدیدتر است و دفعه‌ی بعد که
+                // اینترنت وصل بود، load() آن را انتخاب و به ابر می‌فرستد.
+                try { localStorage.setItem(dirtyKey, '1'); } catch (e2) {}
+            }
         }
+    },
+    // بین نسخه‌ی ابری و لوکال، جدیدترین (بر اساس savedAt) را انتخاب می‌کند.
+    // رکوردهای قدیمی بدون savedAt: مثل قبل، ابر برنده است.
+    pickNewest: function(cloudRaw, localRaw) {
+        if (!cloudRaw) return { raw: localRaw, source: localRaw ? 'local' : null, other: null };
+        if (!localRaw) return { raw: cloudRaw, source: 'cloud', other: null };
+        let c = null, l = null;
+        try { c = JSON.parse(cloudRaw); } catch (e) {}
+        try { l = JSON.parse(localRaw); } catch (e) {}
+        if (!c || typeof c !== 'object') return { raw: localRaw, source: 'local', other: null };
+        if (!l || typeof l !== 'object') return { raw: cloudRaw, source: 'cloud', other: null };
+        if ((Number(l.savedAt) || 0) > (Number(c.savedAt) || 0)) return { raw: localRaw, source: 'local', other: c };
+        return { raw: cloudRaw, source: 'cloud', other: l };
+    },
+    // مراحل حل‌شده، مدال‌ها و کانال‌های پاداش‌گرفته‌شده «هرگز نباید کم شوند»؛ پس
+    // از نسخه‌ی کنار گذاشته‌شده هم اجتماعشان با نسخه‌ی انتخاب‌شده گرفته می‌شود.
+    mergeFrom: function(data, other) {
+        if (!other || typeof other !== 'object') return;
+        if (other.progress && typeof other.progress === 'object') {
+            data.progress = (data.progress && typeof data.progress === 'object') ? data.progress : {};
+            for (const cat of Object.keys(other.progress)) {
+                const a = Array.isArray(data.progress[cat]) ? data.progress[cat] : [];
+                const b = Array.isArray(other.progress[cat]) ? other.progress[cat] : [];
+                data.progress[cat] = [...new Set([...a, ...b])];
+            }
+        }
+        if (Array.isArray(other.unlockedMedals)) {
+            data.unlockedMedals = [...new Set([...(Array.isArray(data.unlockedMedals) ? data.unlockedMedals : []), ...other.unlockedMedals])];
+        }
+        if (other.rewards && other.rewards.channels && typeof other.rewards.channels === 'object') {
+            data.rewards = data.rewards || {};
+            data.rewards.channels = { ...other.rewards.channels, ...((data.rewards && data.rewards.channels) || {}) };
+        }
+        if (other.levelStats && typeof other.levelStats === 'object') {
+            const ls = (data.levelStats && typeof data.levelStats === 'object') ? data.levelStats : {};
+            for (const cat of Object.keys(other.levelStats)) {
+                ls[cat] = { ...other.levelStats[cat], ...(ls[cat] || {}) };
+            }
+            data.levelStats = ls;
+        }
+    },
+    // اعتبارسنجی ساختار رکوردی که از ابر/لوکال خوانده شده (ابر عمومی است و هر کسی
+    // می‌تواند مقدار نامعتبر بنویسد). مقدارهای معتبر دست‌نخورده می‌مانند.
+    sanitize: function(data) {
+        const cleanNum = v => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0; };
+        if ('globalScore' in data) data.globalScore = cleanNum(data.globalScore);
+        if ('totalEarned' in data) data.totalEarned = cleanNum(data.totalEarned);
+        const prog = {};
+        if (data.progress && typeof data.progress === 'object' && !Array.isArray(data.progress)) {
+            for (const cat of Object.keys(data.progress)) {
+                const arr = data.progress[cat];
+                if (!Array.isArray(arr)) continue;
+                prog[cat] = [...new Set(arr.filter(i => Number.isInteger(i) && i >= 0 && i < 100000))];
+            }
+        }
+        data.progress = prog;
+        data.unlockedMedals = Array.isArray(data.unlockedMedals) ? data.unlockedMedals.filter(x => typeof x === 'string') : [];
+        return data;
     },
     // ×۱۰ کردن موجودی و مجموع امتیاز یک رکورد قدیمی. ورودی را تغییر نمی‌دهد؛
     // اگر نتیجه معتبر نباشد null برمی‌گرداند (و پرچم ثبت نمی‌شود تا بعداً دوباره
@@ -564,20 +621,23 @@ const StorageManager = {
         try { localStorage.setItem(this.getKey() + '_backup_pre_x10', rawRecord); } catch (e) {}
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
             // پشتیبان ابری (best-effort؛ پشتیبان لوکال بالا تضمینی است)
-            try { fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}_backup_pre_x10`, { method: 'PUT', body: rawRecord }); } catch (e) {}
+            try { fetchWithTimeout(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}_backup_pre_x10`, { method: 'PUT', body: rawRecord }).catch(() => {}); } catch (e) {}
         }
         return { globalScore: newGs, totalEarned: newTe };
     },
     load: async function(callback) {
         let finalData = null;
+        let cloudData = null;
+        let otherData = null;      // نسخه‌ی کنار گذاشته‌شده (برای اجتماع پیشرفت)
+        let pickedSource = null;   // 'cloud' | 'local'
         let cloudWasAttempted = false;
         let cloudFailedUnexpectedly = false; // true فقط برای خطای واقعی، نه برای «۴۰۴ یعنی کاربر جدید»
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
             cloudWasAttempted = true;
             try {
-                const response = await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`);
+                const response = await fetchWithTimeout(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`);
                 if (response.ok) {
-                    finalData = await response.text();
+                    cloudData = await response.text();
                 } else if (response.status !== 404) {
                     cloudFailedUnexpectedly = true;
                 }
@@ -585,11 +645,17 @@ const StorageManager = {
                 cloudFailedUnexpectedly = true;
             }
         }
-        if (!finalData) finalData = localStorage.getItem(this.getKey());
+        let localData = null;
+        try { localData = localStorage.getItem(this.getKey()); } catch (e) {}
+        const picked = this.pickNewest(cloudData, localData);
+        finalData = picked.raw;
+        pickedSource = picked.source;
+        otherData = picked.other;
 
         if (finalData) {
             try {
-                const data = JSON.parse(finalData);
+                const data = this.sanitize(JSON.parse(finalData));
+                this.mergeFrom(data, otherData && this.sanitize({ ...otherData }));
                 // --- مهاجرت یک‌باره‌ی اقتصاد (×۱۰) ---
                 // پرچم هم در settings (که نسخه‌های قدیمیِ کش‌شده هم عیناً نگه می‌دارند) و هم
                 // در سطح بالای رکورد خوانده می‌شود. باید «قبل از» merge شدن settings با
@@ -623,6 +689,7 @@ const StorageManager = {
                 this.ready = true;
                 if (migrated || alreadyMigrated) GameState.settings.economyVersion = ECONOMY_VERSION;
                 if (migrated) this.save(); // نتیجه‌ی مهاجرت فوراً (لوکال + کلاد) ذخیره شود
+                else if (pickedSource === 'local' && cloudWasAttempted && !cloudFailedUnexpectedly) this.save(); // نسخه‌ی لوکالِ جدیدتر را به ابر برگردان
             } catch (e) {
                 // دیتا وجود داشت ولی خراب/ناسازگار بود؛ به‌جای رفتن به مقادیر
                 // پیش‌فرض و ذخیره‌ی صفر روی آن، save() را قفل نگه می‌داریم تا
@@ -652,7 +719,15 @@ const StorageManager = {
    2. Super Fast Apple Emoji Engine
 ========================================= */
 const emojiSegmentCache = {}; // کش گرافیم‌ها برای سرعت رندر دفعات بعد
-const EMOJI_CDN_BASE = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.0.1/img/apple/64/';
+// بسته‌ی ایموجی: 'apple' (ظاهر آیفون؛ ⚠️ تصاویر اپل دارای حق‌کپی‌اند و لایسنس MIT این
+// پروژه شامل آن‌ها نمی‌شود) یا 'google' (Noto Emoji، لایسنس Apache-2.0، امن‌تر برای انتشار).
+// نام فایل‌ها در هر دو بسته یکسان است، پس تغییر این یک خط کافی است.
+const EMOJI_PACK = 'apple';
+const EMOJI_CDN_BASE = `https://cdn.jsdelivr.net/npm/emoji-datasource-${EMOJI_PACK}@15.0.1/img/${EMOJI_PACK}/64/`;
+// اگر ایموجی‌ها را روی هاست خودت گذاشتی (tools/fetch-emojis.js پوشه‌ی emoji/ را می‌سازد)،
+// این را 'emoji/' بگذار تا اول از همان لود شود و به CDN خارجی (که ممکن است در ایران
+// کند/فیلتر باشد) وابسته نباشد. خالی = غیرفعال (بدون درخواست اضافه‌ی ۴۰۴).
+const EMOJI_LOCAL_BASE = '';
 
 // استخراج تمام کدپوینت‌های یک گرافیم (نه فقط کدپوینت اول!) با پدینگ ۴ رقمی هگز.
 // نکته مهم: ایموجی‌های ترکیبی مثل 👂🏻 (گوش + رنگ پوست)، 🧙‍♂️ (ZWJ)
@@ -699,15 +774,18 @@ function getGraphemeSegments(text) {
 // می‌شدند ایموجی‌هایی مثل ☁️ برای همیشه به شکل آیکون شکسته بمانند.
 function handleEmojiImgError(e) {
     const img = e.target;
-    if (img.dataset.stage === 'fallback') {
-        const span = document.createElement('span');
-        span.textContent = img.dataset.native;
-        span.className = 'apple-emoji apple-emoji-native';
-        img.replaceWith(span);
+    let urls = [];
+    try { urls = JSON.parse(img.dataset.urls || '[]'); } catch (err) {}
+    const next = (parseInt(img.dataset.i || '0', 10) || 0) + 1;
+    if (next < urls.length) {
+        img.dataset.i = String(next);
+        img.src = urls[next];
         return;
     }
-    img.dataset.stage = 'fallback';
-    img.src = img.dataset.fallback;
+    const span = document.createElement('span');
+    span.textContent = img.dataset.native;
+    span.className = 'apple-emoji apple-emoji-native';
+    img.replaceWith(span);
 }
 
 function buildEmojiImg(segment) {
@@ -719,9 +797,19 @@ function buildEmojiImg(segment) {
     const withoutFe0f = hex.filter(c => c !== 'fe0f').join('-');
     const withFe0f = hex.join('-');
 
+    // ترتیب تلاش: (اختیاری) هاست خودمان ← CDN بدون fe0f ← CDN با fe0f ← خود ایموجی به‌صورت متن
+    const urls = [];
+    if (EMOJI_LOCAL_BASE) {
+        urls.push(`${EMOJI_LOCAL_BASE}${withoutFe0f}.png`);
+        if (withFe0f !== withoutFe0f) urls.push(`${EMOJI_LOCAL_BASE}${withFe0f}.png`);
+    }
+    urls.push(`${EMOJI_CDN_BASE}${withoutFe0f}.png`);
+    if (withFe0f !== withoutFe0f) urls.push(`${EMOJI_CDN_BASE}${withFe0f}.png`);
+
     const img = document.createElement('img');
-    img.src = `${EMOJI_CDN_BASE}${withoutFe0f}.png`;
-    img.dataset.fallback = `${EMOJI_CDN_BASE}${withFe0f}.png`;
+    img.src = urls[0];
+    img.dataset.urls = JSON.stringify(urls);
+    img.dataset.i = '0';
     img.dataset.native = segment;
     img.alt = segment;
     // این تصاویر همیشه همون چیزی هستن که کاربر باید فوراً ببینه (خود معمای
@@ -857,43 +945,116 @@ const AVATAR_ICONS = {
 // عنصر آواتار (هدر صفحه اصلی یا صفحه پروفایل) را بر اساس عکس ایتا (اگر بود)
 // یا آیکون جنسیت انتخابی کاربر پر می‌کند، و کلاس گرادیان پس‌زمینه متناسب با
 // جنسیت را ست می‌کند (آبی برای پسر، صورتی برای دختر، آبی خنثی پیش‌فرض).
+// ⚡ سرعت لود عکس پروفایل:
+//  ۱. هدر (عکس و اسم) همان لحظه‌ی باز شدن برنامک و «قبل از» دریافت data.json و
+//     دیتای کلاد کشیده می‌شود (earlyPaintUser)، نه بعد از آن‌ها.
+//  ۲. نسخه‌ی کوچک (۱۲۸ پیکسل) عکس ایتا در localStorage کش می‌شود تا دفعات بعد
+//     بدون هیچ درخواست شبکه و آنی نمایش داده شود.
+//  ۳. اتصال زودهنگام (preconnect) به سرور عکس و اولویت بالا برای لود آن.
+const AVATAR_CACHE_PREFIX = 'razak_avatar_cache_';
+const AVATAR_CACHE_SIZE = 128;
+
+function readAvatarCache() {
+    try {
+        const c = JSON.parse(localStorage.getItem(AVATAR_CACHE_PREFIX + GameState.user.id) || 'null');
+        return (c && typeof c.data === 'string' && c.data.startsWith('data:image/')) ? c : null;
+    } catch (e) { return null; }
+}
+
+// عکس را یک‌بار می‌گیرد، به ۱۲۸×۱۲۸ کوچک می‌کند و ذخیره می‌کند (best-effort؛ اگر
+// سرور عکس CORS را اجازه ندهد یا هر خطایی بیاید، بی‌صدا رد می‌شود).
+async function cacheAvatarPhoto(url) {
+    try {
+        const cached = readAvatarCache();
+        if (cached && cached.src === url) return;
+        const blob = await (await fetchWithTimeout(url, { mode: 'cors', credentials: 'omit' }, 10000)).blob();
+        const bmp = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = AVATAR_CACHE_SIZE;
+        const side = Math.min(bmp.width, bmp.height);
+        canvas.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, AVATAR_CACHE_SIZE, AVATAR_CACHE_SIZE);
+        const data = canvas.toDataURL('image/jpeg', 0.82);
+        if (data.length < 60000) {
+            localStorage.setItem(AVATAR_CACHE_PREFIX + GameState.user.id, JSON.stringify({ src: url, data, t: Date.now() }));
+        }
+    } catch (e) { /* کش نشد؛ مشکلی نیست، عکس اصلی همچنان نمایش داده می‌شود */ }
+}
+
+function warmUpAvatarConnection(url) {
+    try {
+        const origin = new URL(url, location.href).origin;
+        if (origin !== location.origin && !document.querySelector(`link[rel="preconnect"][href="${origin}"]`)) {
+            const l = document.createElement('link');
+            l.rel = 'preconnect'; l.href = origin; l.crossOrigin = 'anonymous';
+            document.head.appendChild(l);
+        }
+    } catch (e) {}
+}
+
+function getAvatarPhotoSrc() {
+    const url = GameState.user.photo_url;
+    const cached = readAvatarCache();
+    if (cached && (!url || cached.src === url)) return cached.data; // آنی، بدون شبکه
+    return url || null;
+}
+
+function makeAvatarImg(src, onFail) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = 'Profile';
+    img.decoding = 'async';
+    img.loading = 'eager';
+    img.setAttribute('fetchpriority', 'high');
+    img.addEventListener('error', onFail, { once: true });
+    return img;
+}
+
 function applyAvatarVisual(avatarEl, gender) {
     avatarEl.classList.remove('gender-boy', 'gender-girl');
     if (gender === 'boy') avatarEl.classList.add('gender-boy');
     if (gender === 'girl') avatarEl.classList.add('gender-girl');
 
-    const avatarId = GameState.settings.avatarId;
-    if (avatarId) {
-        avatarEl.innerHTML = '';
-        const img = document.createElement('img');
-        img.src = `Profile/${avatarId}.jpg`;
-        img.alt = 'Profile';
-        img.addEventListener('error', () => {
-            // اگه فایل عکس پیدا نشد (مثلاً پاک/جابه‌جا شده)، به‌جای آیکون شکسته
-            // برمی‌گردیم به همون آیکون هندسی جنسیت
-            avatarEl.innerHTML = AVATAR_ICONS[gender] || AVATAR_ICONS.neutral;
-            avatarEl.style.background = '';
-        });
-        avatarEl.appendChild(img);
-        avatarEl.style.background = 'transparent';
-        return;
-    }
-
-    if (GameState.user.photo_url) {
-        avatarEl.innerHTML = '';
-        const img = document.createElement('img');
-        img.src = GameState.user.photo_url;
-        img.alt = 'Profile';
-        img.addEventListener('error', () => {
-            avatarEl.innerHTML = AVATAR_ICONS[gender] || AVATAR_ICONS.neutral;
-            avatarEl.style.background = '';
-        });
-        avatarEl.appendChild(img);
-        avatarEl.style.background = 'transparent';
-    } else {
+    const fallbackIcon = () => {
         avatarEl.innerHTML = AVATAR_ICONS[gender] || AVATAR_ICONS.neutral;
         avatarEl.style.background = '';
+        delete avatarEl.dataset.src;
+    };
+    const avatarId = GameState.settings.avatarId;
+    const src = avatarId ? `Profile/${avatarId}.jpg` : getAvatarPhotoSrc();
+    if (!src) { fallbackIcon(); return; }
+
+    // همان عکس از قبل نمایش داده شده؛ دوباره ساختنش باعث چشمک‌زدن و لود مجدد می‌شود
+    if (avatarEl.dataset.src === src && avatarEl.querySelector('img')) return;
+
+    avatarEl.innerHTML = '';
+    // اگه فایل پیدا نشد (مثلاً پاک/جابه‌جا شده)، به‌جای آیکون شکسته برمی‌گردیم
+    // به همون آیکون هندسی جنسیت
+    avatarEl.appendChild(makeAvatarImg(src, fallbackIcon));
+    avatarEl.dataset.src = src;
+    avatarEl.style.background = 'transparent';
+
+    if (!avatarId && GameState.user.photo_url && src === GameState.user.photo_url) {
+        cacheAvatarPhoto(GameState.user.photo_url); // دفعه‌ی بعد آنی بیاید
     }
+}
+
+// قبل از هر await در شروع برنامک صدا زده می‌شود: عکس و اسم از روی داده‌ی
+// لوکالِ همین دستگاه (همزمان، بدون شبکه) کشیده می‌شوند. وقتی لود کامل (کلاد)
+// تمام شد، renderHome همین‌ها را درست و بدون چشمک به‌روز می‌کند.
+function earlyPaintUser() {
+    try {
+        if (GameState.user.photo_url) warmUpAvatarConnection(GameState.user.photo_url);
+        const raw = localStorage.getItem(StorageManager.getKey());
+        if (raw) {
+            const local = JSON.parse(raw);
+            if (local && local.settings && typeof local.settings === 'object') {
+                const s = local.settings;
+                GameState.settings = { ...GameState.settings, avatarId: s.avatarId ?? null, gender: s.gender ?? null, displayName: s.displayName ?? null };
+            }
+        }
+        document.getElementById('user-name').textContent = getDisplayName();
+        applyAvatarVisual(document.getElementById('user-avatar'), GameState.settings.gender);
+    } catch (e) { /* رندر اولیه اختیاری است؛ renderHome بعداً همه‌چیز را درست می‌کند */ }
 }
 
 // مجموعه‌ی عکس‌های آماده‌ی پروفایل (داخل پوشه‌ی Profile/). نام واقعی
@@ -1151,7 +1312,7 @@ function validateSuggestion(f) {
 }
 
 function buildSuggestionText(f) {
-    return `نام شما(اختیاری): ${f.name}\nایده و یا انتقاد شما: ${f.idea}\nایموجی های پیشنهادی: ${f.emojis}`;
+    return `نام شما (اختیاری): ${f.name}\nایده و یا انتقاد شما: ${f.idea}\nایموجی های پیشنهادی: ${f.emojis}`;
 }
 
 // برمی‌گرداند: { ok: true } یا { ok: false, reason: 'not-configured' | 'network' | 'server' }
@@ -1163,7 +1324,7 @@ async function sendSuggestion(f) {
         date: new Date().toISOString(), appVersion: APP_VERSION
     });
     try {
-        const res = await fetch(`https://kvdb.io/${SUGGESTIONS_BUCKET_ID}/${key}`, { method: 'PUT', body });
+        const res = await fetchWithTimeout(`https://kvdb.io/${SUGGESTIONS_BUCKET_ID}/${key}`, { method: 'PUT', body });
         return res.ok ? { ok: true } : { ok: false, reason: 'server' };
     } catch (e) {
         return { ok: false, reason: 'network' };
@@ -1849,7 +2010,7 @@ function renderLevel() {
         keyUnits.push(...shuffledBank.slice(0, decoyCount));
     } else {
         while (keyUnits.length < Math.max(24, requiredUnits.length + 6)) {
-            keyUnits.push(PERSIAN_ALPHABET[Math.floor(Math.random() * PERSIAN_ALPHABET.length)]);
+            keyUnits.push(DECOY_ALPHABET[Math.floor(Math.random() * DECOY_ALPHABET.length)]);
         }
     }
     keyUnits.sort(() => Math.random() - 0.5);
@@ -2509,8 +2670,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         // اشتباهی وصل شود یا رکورد واقعی‌اش گم به‌نظر برسد.
     }
 
+    earlyPaintUser();
+
     try {
         const res = await fetch('data.json?v=' + APP_VERSION);
+        if (!res.ok) throw new Error('data.json HTTP ' + res.status);
         DB = await res.json();
     } catch (e) {
         DB = { categories: [{ id: "proverbs", name: "ضرب‌المثل‌ها", icon: "🎭", levels: [{ emoji: "👂🏻🚪👂🏻🥅", answer: "یه گوشش دره یه گوشش دروازه" }] }] };
