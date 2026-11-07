@@ -22,8 +22,8 @@
 //   فقط آبجکتش رو از آرایه بردار (یا اگه می‌خوای موقت مخفی بشه، active:false اضافه کن).
 window.REWARD_SETTINGS = {
     channels: [
-        { id: 'tech_nour', name: 'تک نور | Tech nour', icon: '📢', username: 'Tech_nour', reward: 1000 },
-        { id: 'rasa_meme', name: 'Rasa Meme | رسامیم', icon: '😂', username: 'Rasa_Meme', reward: 1000 },
+        { id: 'tech_nour', name: 'تِک‌نور | 𝙏𝙚𝙘𝙝 𝙣𝙤𝙪𝙧', icon: '📢', username: 'Tech_nour', reward: 1000 },
+        { id: 'rasa_meme', name: 'رسامیم | Rasa Meme', icon: '😂', username: 'Rasa_Meme', reward: 1000 },
         // کانال/کانال‌های شخصی خودت. یوزرنیم رو جایگزین placeholder کن.
         { id: 'ashob_daron', name: 'آشوب درون | Ashob daron', icon: '📌', username: 'Ashob_daron', reward: 1000 },
         // همون تبلیغ‌کننده‌ی فعلی «کانال‌های ما» در صفحه اصلی (CHANNEL_PROMOS
