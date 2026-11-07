@@ -28,11 +28,18 @@ window.REWARD_SETTINGS = {
         { id: 'ashob_daron', name: 'آشوب درون | Ashob daron', icon: '📌', username: 'Ashob_daron', reward: 1000 },
         // همون تبلیغ‌کننده‌ی فعلی «کانال‌های ما» در صفحه اصلی (CHANNEL_PROMOS
         // در app.js)؛ یوزرنیم اینجا هم دستی هماهنگ نگه‌داشته می‌شه.
-        { id: 'tab_amoo', name: 'تبلیغات عمو', icon: '📣', username: 'tab_amoo', reward: 2000 }
+        { id: 'tab_amoo', name: 'تبلیغات عمو', icon: '📣', username: 'tab_amoo', reward: 2000 },
+        // --- کانال‌های جدید (پاداش یک‌بار برای همیشه) ---
+        { id: 'razak_plus', name: 'رازک | Razak', username: 'RazakPlus', reward: 1000 },
+        { id: 'avay_khiyal', name: 'آوای خیال', username: 'avay_khiyal', reward: 1000 },
+        { id: 'eitaayazd', name: 'ایتایز', username: 'eitaayazd', reward: 1000 },
+        { id: 'all_channels', name: 'کانال‌های من!', username: 'all_Channels', reward: 1000 },
+        { id: 'im_monk', name: 'راهب', username: 'im_monk', reward: 1000 },
+        { id: 'amoo_rasool', name: 'عمو رسول', username: 'Amoo_rasool', reward: 1000 }
     ],
 
     // --- جایگاه «چهارم»: تبلیغات چرخشی کاربران (استثنا) ---
-    // بر خلاف ۴ کارت بالا، این جایگاه قراره بعداً بارها بین تبلیغ‌کننده‌های
+    // بر خلاف ۵ کارت بالا، این جایگاه قراره بعداً بارها بین تبلیغ‌کننده‌های
     // مختلف دست‌به‌دست بشه. برای همین «یک‌بار برای همیشه» معنی نداره؛ منطقش
     // «یک‌بار برای هر slotVersion» است: کاربری که برای تبلیغ‌کننده‌ی فعلی
     // (v1) پاداش گرفته، وقتی تبلیغ‌کننده عوض بشه (v2)، دوباره واجد شرایط
