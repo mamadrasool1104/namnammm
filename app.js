@@ -30,19 +30,6 @@ function resolveEitaaUserId(rawUser) {
 const SUGGESTIONS_BUCKET_ID = KVDB_BUCKET_ID;
 const SUGGESTIONS_PV_URL = 'https://eitaa.com/ferstadeh';
 const PERSIAN_ALPHABET = "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی";
-// حروفی که فقط در جواب‌ها پیدا می‌شوند (آ، ئ). اگر در حروف مزاحم کیبورد نباشند،
-// وجودشان روی کیبورد خودش لو می‌دهد که جزو جواب است؛ پس به مزاحم‌ها هم اضافه شده‌اند.
-const DECOY_ALPHABET = PERSIAN_ALPHABET + "آئ";
-
-// fetch با سقف زمانی: اگر KVDB کند یا فیلتر باشد، بازی نباید روی صفحه‌ی لودینگ
-// گیر کند. بعد از ms میلی‌ثانیه درخواست لغو می‌شود (خطا مثل قطعی شبکه مدیریت می‌شود).
-const CLOUD_TIMEOUT_MS = 8000;
-function fetchWithTimeout(url, opts = {}, ms = CLOUD_TIMEOUT_MS) {
-    if (typeof AbortController === 'undefined') return fetch(url, opts);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), ms);
-    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
 // ⚙️ اقتصاد سکه (نسخه‌ی ۲): همه‌ی پاداش‌ها و هزینه‌ها ۱۰ برابر نسخه‌ی ۱ هستند.
 // ECONOMY_VERSION داخل خود رکورد کاربر (settings.economyVersion) ذخیره می‌شود
 // تا مهاجرت ×۱۰ موجودی قدیمی دقیقاً یک‌بار برای هر کاربر انجام شود.
@@ -70,9 +57,9 @@ const TECH_NOUR_LINK = 'https://eitaa.com/Tech_nour';
 
 // همه‌ی تنظیمات چرخش، از فایل‌های جداگانه‌ی هر کانال خوانده می‌شود — نه
 // اینجا. برای تغییر دادن کانال‌ها، ترتیب، فعال/غیرفعال کردن، یا تاریخ
-// شروع، به فایل‌های index.js (ترتیب چرخش، تاریخ شروع، تک‌نور/رسامیم) و partner.js
-// (کانال همکار) کنار همین فایل برو. این فایل‌ها باید در index.html قبل از
-// app.js لود شوند (الان همین‌طور است).
+// شروع، به پوشه‌ی config/mandatory-channels/ برو (هر کانال یک فایل جدا،
+// + یک index.js که ترتیب چرخش را مشخص می‌کند). این فایل‌ها باید در
+// index.html قبل از app.js لود شوند.
 //
 // fallback زیر («اگر آن فایل‌ها به هر دلیلی لود نشده بودند») عمداً همان
 // چهار کانال پیش‌فرض را دارد تا اگر یک نفر پوشه‌ی config/ را حذف کرد، بازی
@@ -172,20 +159,8 @@ const CATEGORY_SCORES = {
 // یک آبجکت جدید بالای این آرایه اضافه کن و APP_VERSION را هم به‌روز کن؛
 // خودکار یک بار برای کاربرهایی که نسخه قبلی را دیده‌اند، پنجره «تازه‌های این
 // نسخه» نمایش داده می‌شود (و همیشه هم از تنظیمات قابل مشاهده است).
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.11.0';
 const CHANGELOG_DB = [
-    {
-        version: '1.15.0',
-        added: [
-            'مرحله‌های جدید در دسته کشورها',
-            'ایموجی‌ها و پاسخ چند معما دقیق‌تر و واضح‌تر شد'
-        ],
-        fixed: [
-            'بارگذاری سریع‌تر و پایدارتر هنگام کندی یا قطعی اینترنت',
-            'همگام‌سازی امن‌تر پیشرفت بین چند دستگاه',
-            'رفع چند باگ جزئی'
-        ]
-    },
     {
         version: '1.11.0',
         added: [
@@ -520,7 +495,6 @@ const StorageManager = {
             return;
         }
         const payload = JSON.stringify({
-            savedAt: Date.now(), // برای انتخاب جدیدترین نسخه بین لوکال و ابر هنگام بارگذاری
             globalScore: GameState.globalScore,
             totalEarned: GameState.totalEarned,
             economyVersion: ECONOMY_VERSION,
@@ -532,77 +506,10 @@ const StorageManager = {
             joinGate: GameState.joinGate,
             rewards: GameState.rewards
         });
-        try { localStorage.setItem(this.getKey(), payload); } catch (e) {}
+        localStorage.setItem(this.getKey(), payload);
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
-            const dirtyKey = this.getKey() + '_cloud_dirty';
-            try {
-                const res = await fetchWithTimeout(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`, { method: 'PUT', body: payload });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                try { localStorage.removeItem(dirtyKey); } catch (e) {}
-            } catch (e) {
-                // ذخیره‌ی ابری ناموفق بود؛ نسخه‌ی لوکال جدیدتر است و دفعه‌ی بعد که
-                // اینترنت وصل بود، load() آن را انتخاب و به ابر می‌فرستد.
-                try { localStorage.setItem(dirtyKey, '1'); } catch (e2) {}
-            }
+            try { await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`, { method: 'PUT', body: payload }); } catch (e) {}
         }
-    },
-    // بین نسخه‌ی ابری و لوکال، جدیدترین (بر اساس savedAt) را انتخاب می‌کند.
-    // رکوردهای قدیمی بدون savedAt: مثل قبل، ابر برنده است.
-    pickNewest: function(cloudRaw, localRaw) {
-        if (!cloudRaw) return { raw: localRaw, source: localRaw ? 'local' : null, other: null };
-        if (!localRaw) return { raw: cloudRaw, source: 'cloud', other: null };
-        let c = null, l = null;
-        try { c = JSON.parse(cloudRaw); } catch (e) {}
-        try { l = JSON.parse(localRaw); } catch (e) {}
-        if (!c || typeof c !== 'object') return { raw: localRaw, source: 'local', other: null };
-        if (!l || typeof l !== 'object') return { raw: cloudRaw, source: 'cloud', other: null };
-        if ((Number(l.savedAt) || 0) > (Number(c.savedAt) || 0)) return { raw: localRaw, source: 'local', other: c };
-        return { raw: cloudRaw, source: 'cloud', other: l };
-    },
-    // مراحل حل‌شده، مدال‌ها و کانال‌های پاداش‌گرفته‌شده «هرگز نباید کم شوند»؛ پس
-    // از نسخه‌ی کنار گذاشته‌شده هم اجتماعشان با نسخه‌ی انتخاب‌شده گرفته می‌شود.
-    mergeFrom: function(data, other) {
-        if (!other || typeof other !== 'object') return;
-        if (other.progress && typeof other.progress === 'object') {
-            data.progress = (data.progress && typeof data.progress === 'object') ? data.progress : {};
-            for (const cat of Object.keys(other.progress)) {
-                const a = Array.isArray(data.progress[cat]) ? data.progress[cat] : [];
-                const b = Array.isArray(other.progress[cat]) ? other.progress[cat] : [];
-                data.progress[cat] = [...new Set([...a, ...b])];
-            }
-        }
-        if (Array.isArray(other.unlockedMedals)) {
-            data.unlockedMedals = [...new Set([...(Array.isArray(data.unlockedMedals) ? data.unlockedMedals : []), ...other.unlockedMedals])];
-        }
-        if (other.rewards && other.rewards.channels && typeof other.rewards.channels === 'object') {
-            data.rewards = data.rewards || {};
-            data.rewards.channels = { ...other.rewards.channels, ...((data.rewards && data.rewards.channels) || {}) };
-        }
-        if (other.levelStats && typeof other.levelStats === 'object') {
-            const ls = (data.levelStats && typeof data.levelStats === 'object') ? data.levelStats : {};
-            for (const cat of Object.keys(other.levelStats)) {
-                ls[cat] = { ...other.levelStats[cat], ...(ls[cat] || {}) };
-            }
-            data.levelStats = ls;
-        }
-    },
-    // اعتبارسنجی ساختار رکوردی که از ابر/لوکال خوانده شده (ابر عمومی است و هر کسی
-    // می‌تواند مقدار نامعتبر بنویسد). مقدارهای معتبر دست‌نخورده می‌مانند.
-    sanitize: function(data) {
-        const cleanNum = v => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0; };
-        if ('globalScore' in data) data.globalScore = cleanNum(data.globalScore);
-        if ('totalEarned' in data) data.totalEarned = cleanNum(data.totalEarned);
-        const prog = {};
-        if (data.progress && typeof data.progress === 'object' && !Array.isArray(data.progress)) {
-            for (const cat of Object.keys(data.progress)) {
-                const arr = data.progress[cat];
-                if (!Array.isArray(arr)) continue;
-                prog[cat] = [...new Set(arr.filter(i => Number.isInteger(i) && i >= 0 && i < 100000))];
-            }
-        }
-        data.progress = prog;
-        data.unlockedMedals = Array.isArray(data.unlockedMedals) ? data.unlockedMedals.filter(x => typeof x === 'string') : [];
-        return data;
     },
     // ×۱۰ کردن موجودی و مجموع امتیاز یک رکورد قدیمی. ورودی را تغییر نمی‌دهد؛
     // اگر نتیجه معتبر نباشد null برمی‌گرداند (و پرچم ثبت نمی‌شود تا بعداً دوباره
@@ -621,23 +528,20 @@ const StorageManager = {
         try { localStorage.setItem(this.getKey() + '_backup_pre_x10', rawRecord); } catch (e) {}
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
             // پشتیبان ابری (best-effort؛ پشتیبان لوکال بالا تضمینی است)
-            try { fetchWithTimeout(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}_backup_pre_x10`, { method: 'PUT', body: rawRecord }).catch(() => {}); } catch (e) {}
+            try { fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}_backup_pre_x10`, { method: 'PUT', body: rawRecord }); } catch (e) {}
         }
         return { globalScore: newGs, totalEarned: newTe };
     },
     load: async function(callback) {
         let finalData = null;
-        let cloudData = null;
-        let otherData = null;      // نسخه‌ی کنار گذاشته‌شده (برای اجتماع پیشرفت)
-        let pickedSource = null;   // 'cloud' | 'local'
         let cloudWasAttempted = false;
         let cloudFailedUnexpectedly = false; // true فقط برای خطای واقعی، نه برای «۴۰۴ یعنی کاربر جدید»
         if (GameState.user.id !== 'guest' && KVDB_BUCKET_ID !== "YOUR_BUCKET_ID_HERE") {
             cloudWasAttempted = true;
             try {
-                const response = await fetchWithTimeout(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`);
+                const response = await fetch(`https://kvdb.io/${KVDB_BUCKET_ID}/${GameState.user.id}`);
                 if (response.ok) {
-                    cloudData = await response.text();
+                    finalData = await response.text();
                 } else if (response.status !== 404) {
                     cloudFailedUnexpectedly = true;
                 }
@@ -645,17 +549,11 @@ const StorageManager = {
                 cloudFailedUnexpectedly = true;
             }
         }
-        let localData = null;
-        try { localData = localStorage.getItem(this.getKey()); } catch (e) {}
-        const picked = this.pickNewest(cloudData, localData);
-        finalData = picked.raw;
-        pickedSource = picked.source;
-        otherData = picked.other;
+        if (!finalData) finalData = localStorage.getItem(this.getKey());
 
         if (finalData) {
             try {
-                const data = this.sanitize(JSON.parse(finalData));
-                this.mergeFrom(data, otherData && this.sanitize({ ...otherData }));
+                const data = JSON.parse(finalData);
                 // --- مهاجرت یک‌باره‌ی اقتصاد (×۱۰) ---
                 // پرچم هم در settings (که نسخه‌های قدیمیِ کش‌شده هم عیناً نگه می‌دارند) و هم
                 // در سطح بالای رکورد خوانده می‌شود. باید «قبل از» merge شدن settings با
@@ -689,7 +587,6 @@ const StorageManager = {
                 this.ready = true;
                 if (migrated || alreadyMigrated) GameState.settings.economyVersion = ECONOMY_VERSION;
                 if (migrated) this.save(); // نتیجه‌ی مهاجرت فوراً (لوکال + کلاد) ذخیره شود
-                else if (pickedSource === 'local' && cloudWasAttempted && !cloudFailedUnexpectedly) this.save(); // نسخه‌ی لوکالِ جدیدتر را به ابر برگردان
             } catch (e) {
                 // دیتا وجود داشت ولی خراب/ناسازگار بود؛ به‌جای رفتن به مقادیر
                 // پیش‌فرض و ذخیره‌ی صفر روی آن، save() را قفل نگه می‌داریم تا
@@ -719,15 +616,7 @@ const StorageManager = {
    2. Super Fast Apple Emoji Engine
 ========================================= */
 const emojiSegmentCache = {}; // کش گرافیم‌ها برای سرعت رندر دفعات بعد
-// بسته‌ی ایموجی: 'apple' (ظاهر آیفون؛ ⚠️ تصاویر اپل دارای حق‌کپی‌اند و لایسنس MIT این
-// پروژه شامل آن‌ها نمی‌شود) یا 'google' (Noto Emoji، لایسنس Apache-2.0، امن‌تر برای انتشار).
-// نام فایل‌ها در هر دو بسته یکسان است، پس تغییر این یک خط کافی است.
-const EMOJI_PACK = 'apple';
-const EMOJI_CDN_BASE = `https://cdn.jsdelivr.net/npm/emoji-datasource-${EMOJI_PACK}@15.0.1/img/${EMOJI_PACK}/64/`;
-// اگر ایموجی‌ها را روی هاست خودت گذاشتی (tools/fetch-emojis.js پوشه‌ی emoji/ را می‌سازد)،
-// این را 'emoji/' بگذار تا اول از همان لود شود و به CDN خارجی (که ممکن است در ایران
-// کند/فیلتر باشد) وابسته نباشد. خالی = غیرفعال (بدون درخواست اضافه‌ی ۴۰۴).
-const EMOJI_LOCAL_BASE = '';
+const EMOJI_CDN_BASE = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.0.1/img/apple/64/';
 
 // استخراج تمام کدپوینت‌های یک گرافیم (نه فقط کدپوینت اول!) با پدینگ ۴ رقمی هگز.
 // نکته مهم: ایموجی‌های ترکیبی مثل 👂🏻 (گوش + رنگ پوست)، 🧙‍♂️ (ZWJ)
@@ -774,18 +663,15 @@ function getGraphemeSegments(text) {
 // می‌شدند ایموجی‌هایی مثل ☁️ برای همیشه به شکل آیکون شکسته بمانند.
 function handleEmojiImgError(e) {
     const img = e.target;
-    let urls = [];
-    try { urls = JSON.parse(img.dataset.urls || '[]'); } catch (err) {}
-    const next = (parseInt(img.dataset.i || '0', 10) || 0) + 1;
-    if (next < urls.length) {
-        img.dataset.i = String(next);
-        img.src = urls[next];
+    if (img.dataset.stage === 'fallback') {
+        const span = document.createElement('span');
+        span.textContent = img.dataset.native;
+        span.className = 'apple-emoji apple-emoji-native';
+        img.replaceWith(span);
         return;
     }
-    const span = document.createElement('span');
-    span.textContent = img.dataset.native;
-    span.className = 'apple-emoji apple-emoji-native';
-    img.replaceWith(span);
+    img.dataset.stage = 'fallback';
+    img.src = img.dataset.fallback;
 }
 
 function buildEmojiImg(segment) {
@@ -797,19 +683,9 @@ function buildEmojiImg(segment) {
     const withoutFe0f = hex.filter(c => c !== 'fe0f').join('-');
     const withFe0f = hex.join('-');
 
-    // ترتیب تلاش: (اختیاری) هاست خودمان ← CDN بدون fe0f ← CDN با fe0f ← خود ایموجی به‌صورت متن
-    const urls = [];
-    if (EMOJI_LOCAL_BASE) {
-        urls.push(`${EMOJI_LOCAL_BASE}${withoutFe0f}.png`);
-        if (withFe0f !== withoutFe0f) urls.push(`${EMOJI_LOCAL_BASE}${withFe0f}.png`);
-    }
-    urls.push(`${EMOJI_CDN_BASE}${withoutFe0f}.png`);
-    if (withFe0f !== withoutFe0f) urls.push(`${EMOJI_CDN_BASE}${withFe0f}.png`);
-
     const img = document.createElement('img');
-    img.src = urls[0];
-    img.dataset.urls = JSON.stringify(urls);
-    img.dataset.i = '0';
+    img.src = `${EMOJI_CDN_BASE}${withoutFe0f}.png`;
+    img.dataset.fallback = `${EMOJI_CDN_BASE}${withFe0f}.png`;
     img.dataset.native = segment;
     img.alt = segment;
     // این تصاویر همیشه همون چیزی هستن که کاربر باید فوراً ببینه (خود معمای
@@ -881,14 +757,23 @@ const AudioEngine = (function() {
 ========================================= */
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+    const el = document.getElementById(id);
+    el.classList.add('active');
+    el.scrollTop = 0;
     window.scrollTo(0, 0);
+    // رازک ۲.۰: نوار پایین و پس‌زمینه بر اساس صفحه‌ی فعال تنظیم می‌شوند
+    document.body.dataset.screen = id;
+    try {
+        const bb = window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton;
+        if (bb) { if (id === 'screen-home') bb.hide(); else bb.show(); }
+    } catch (e) {}
+    if (window.RZ && window.RZ.onScreen) window.RZ.onScreen(id);
 }
 
 function applyTheme() {
     document.body.setAttribute('data-theme', GameState.settings.darkMode ? 'dark' : 'light');
     if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.setHeaderColor) {
-        window.Eitaa.WebApp.setHeaderColor(GameState.settings.darkMode ? '#000000' : '#f2f2f7');
+        window.Eitaa.WebApp.setHeaderColor(GameState.settings.darkMode ? '#0d0b2e' : '#2a1a6e');
     }
 }
 
@@ -902,6 +787,28 @@ function goBackToHome() {
     if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
         window.Eitaa.WebApp.BackButton.hide();
     }
+}
+
+// --- صفحه‌های اصلی (نوار پایین): مرحله‌ها / جایزه‌ها / پروفایل ---
+function syncCoins() {
+    document.querySelectorAll('[data-coins]').forEach(el => { el.textContent = GameState.globalScore; });
+}
+function openCategories(silent) {
+    if (!silent) AudioEngine.tap();
+    renderCategories();
+    syncCoins();
+    showScreen('screen-categories');
+}
+function openRewardsScreen() {
+    AudioEngine.tap();
+    renderMedals();
+    syncCoins();
+    showScreen('screen-rewards');
+}
+function openProfile() {
+    AudioEngine.tap();
+    renderProfile();
+    showScreen('screen-profile');
 }
 
 // وب‌ویوی داخل اپ ایتا معمولاً ناوبری مستقیم <a> یا window.open را مسدود
@@ -967,7 +874,7 @@ async function cacheAvatarPhoto(url) {
     try {
         const cached = readAvatarCache();
         if (cached && cached.src === url) return;
-        const blob = await (await fetchWithTimeout(url, { mode: 'cors', credentials: 'omit' }, 10000)).blob();
+        const blob = await (await fetch(url, { mode: 'cors', credentials: 'omit' })).blob();
         const bmp = await createImageBitmap(blob);
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = AVATAR_CACHE_SIZE;
@@ -1138,6 +1045,12 @@ function selectAvatarPhoto(avatarId, matchingGender) {
     document.getElementById('modal-avatar-picker').classList.add('hidden');
 }
 
+function getTotalStars() {
+    let sum = 0;
+    DB.categories.forEach(cat => { for (let i = 0; i < cat.levels.length; i++) sum += getLevelStars(cat.id, i); });
+    return sum;
+}
+
 function renderHome() {
     const scoreEl = document.getElementById('home-total-score');
     const prevShown = parseInt(scoreEl.textContent, 10);
@@ -1147,45 +1060,84 @@ function renderHome() {
         pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump');
     }
     document.getElementById('user-name').textContent = getDisplayName();
-
     applyAvatarVisual(document.getElementById('user-avatar'), GameState.settings.gender);
+    syncCoins();
+    const starsEl = document.getElementById('home-total-stars');
+    if (starsEl) starsEl.textContent = getTotalStars();
 
-    const medalsContainer = document.getElementById('medals-container');
-    medalsContainer.innerHTML = '';
+    renderMedals();
+    renderCategories();
+    renderContinue();
+    renderDailyChallengeCard();
+    renderChannelPromos();
+}
+
+// ایموجی‌ها با همان موتور ایموجی اپل (و fallback خودکار) داخل المان قرار می‌گیرند
+function setAppleEmoji(el, emoji) {
+    try { renderAppleEmojis(el, emoji); } catch (e) { el.textContent = emoji; }
+}
+
+// صفحه‌ی «جایزه‌ها»: همه‌ی مدال‌ها در یک لیست عمودی؛ باز و قفل ظاهر جدا دارند
+function renderMedals() {
+    const box = document.getElementById('medals-container');
+    if (!box) return;
+    box.innerHTML = '';
     MEDALS_DB.forEach(medal => {
-        const isUnlocked = GameState.unlockedMedals.includes(medal.id);
-        const div = document.createElement('div');
-        div.className = `medal-card ${isUnlocked ? 'unlocked' : ''}`;
-        const progressHtml = (!isUnlocked && medal.progress) ? `<span class="medal-progress">${medal.progress(GameState)}</span>` : '';
-        div.innerHTML = `<span class="medal-icon">${medal.icon}</span><span class="medal-name">${medal.name}</span>${progressHtml}`;
-        medalsContainer.appendChild(div);
+        const unlocked = GameState.unlockedMedals.includes(medal.id);
+        let pct = unlocked ? 100 : 0, progTxt = '';
+        if (!unlocked && medal.progress) {
+            progTxt = medal.progress(GameState);
+            const [n, d] = String(progTxt).split('/').map(Number);
+            if (d > 0) pct = Math.max(0, Math.min(100, (n / d) * 100));
+        }
+        const row = document.createElement('div');
+        row.className = `medal-row ${unlocked ? 'unlocked' : 'locked'}`;
+        row.innerHTML = `
+            <span class="medal-icon"></span>
+            <div class="medal-body">
+                <div class="medal-name">${medal.name}</div>
+                <div class="medal-desc">${medal.desc || ''}</div>
+                ${unlocked ? '' : `<div class="medal-bar"><i style="width:${pct}%"></i></div>`}
+            </div>
+            <div class="medal-state">${unlocked ? '<span class="medal-check">✓</span><span class="medal-state-txt">باز شد</span>' : `<span class="medal-lock">🔒</span><span class="medal-state-txt">${toFaDigits(progTxt)}</span>`}</div>`;
+        setAppleEmoji(row.querySelector('.medal-icon'), medal.icon);
+        box.appendChild(row);
     });
-    document.getElementById('medals-count').textContent = `${GameState.unlockedMedals.length}/${MEDALS_DB.length}`;
+    const got = GameState.unlockedMedals.length, all = MEDALS_DB.length;
+    document.getElementById('medals-count').textContent = `${toFaDigits(got)}/${toFaDigits(all)}`;
+    const ring = document.getElementById('medals-ring');
+    if (ring) ring.style.setProperty('--p', all ? Math.round((got / all) * 100) : 0);
+}
 
+// صفحه‌ی «مرحله‌ها»: کارت رنگی هر دسته‌بندی (خود مرحله‌ها بعد از لمس در screen-levels)
+function renderCategories() {
     const catContainer = document.getElementById('categories-container');
+    if (!catContainer) return;
     catContainer.innerHTML = '';
     DB.categories.forEach(cat => {
-        const completed = GameState.progress[cat.id]?.length || 0;
+        const completed = Math.min(GameState.progress[cat.id]?.length || 0, cat.levels.length);
         const total = cat.levels.length;
         const perc = total > 0 ? (completed / total) * 100 : 0;
         const div = document.createElement('div');
-        // دسته‌بندی‌ای که هنوز هیچ مرحله‌ای ندارد (total === 0) به‌طور خودکار
-        // به‌شکل «قفل/به‌زودی» نمایش داده می‌شود و قابل‌کلیک نیست — این قانون
-        // عمومی است، یعنی هر دسته‌بندی جدیدی که levels آن هنوز خالی است
-        // (مثل «اصطلاحات» یا «ایده‌های شما» تا وقتی که مرحله‌ای برایش اضافه
-        // نشده) خودکار همین رفتار را می‌گیرد، بدون نیاز به هیچ کد اضافه‌ای؛
-        // به‌محض این‌که در data.json حداقل یک مرحله به levels آن اضافه شود،
-        // خودش قابل‌بازی می‌شود.
+        // دسته‌بندی‌ای که هنوز هیچ مرحله‌ای ندارد (total === 0) خودکار «قفل/به‌زودی» است
+        // و قابل‌کلیک نیست؛ به‌محض اضافه شدن مرحله به data.json خودش بازی‌شدنی می‌شود.
         const isIdeas = cat.id === 'ideas'; // کارت ایده‌های شما → صفحه‌ی فرم پیشنهادات
         const isLocked = total === 0 && !isIdeas;
-        div.className = `category-card ${isLocked ? 'locked' : (completed === total ? 'completed' : '')}`;
+        let stars = 0;
+        for (let i = 0; i < total; i++) stars += getLevelStars(cat.id, i);
+        div.className = `category-card cat-${cat.id} ${isLocked ? 'locked' : (total > 0 && completed === total ? 'completed' : '')}`;
+        const side = isIdeas ? '<span class="cat-go">‹</span>'
+            : isLocked ? '<span class="cat-soon">به‌زودی</span>'
+            : (completed === total ? '<span class="cat-done">✓</span>' : `<span class="cat-percent">${toFaDigits(Math.round(perc))}٪</span>`);
         div.innerHTML = `
-            <div class="cat-icon">${cat.icon}</div>
+            <div class="cat-icon"></div>
             <div class="cat-info">
                 <h3 class="cat-title">${cat.name}</h3>
-                <div class="cat-stats">${isIdeas ? 'ایده یا انتقادت رو برامون بفرست' : (isLocked ? 'به‌زودی...' : `${completed} از ${total} مرحله`)}</div>
+                <div class="cat-stats">${isIdeas ? 'ایده یا انتقادت رو برامون بفرست' : (isLocked ? 'به‌زودی...' : `${toFaDigits(completed)} از ${toFaDigits(total)} مرحله${stars ? ` · ⭐ ${toFaDigits(stars)}` : ''}`)}</div>
                 ${(isLocked || isIdeas) ? '' : `<div class="progress-track"><div class="progress-fill" style="width: ${perc}%"></div></div>`}
-            </div>`;
+            </div>
+            <div class="cat-side">${side}</div>`;
+        setAppleEmoji(div.querySelector('.cat-icon'), cat.icon);
         if (isIdeas) {
             div.addEventListener('click', () => { AudioEngine.tap(); openSuggestionsPage(); });
         } else if (!isLocked) {
@@ -1193,40 +1145,39 @@ function renderHome() {
         }
         catContainer.appendChild(div);
     });
-
-    renderDailyChallengeCard();
-    renderChannelPromos();
 }
 
-// بنر بزرگ وسط صفحه: درصد پیشرفت کل بازی + دکمه‌ی ادامه (اولین دسته‌ی ناتمام)
-function renderHeroBanner() {
-    const banner = document.getElementById('hero-banner');
-    if (!banner) return;
-    let done = 0, total = 0, next = null;
+// دکمه‌ی «ادامه بازی»: اولین دسته‌ی ناتمام (با همان گیت عضویت اجباری)
+function renderContinue() {
+    const btn = document.getElementById('btn-continue');
+    if (!btn) return;
+    let done = 0, total = 0, next = null, nextIdx = 0;
     DB.categories.forEach(cat => {
         const t = cat.levels.length;
-        const d = Math.min(GameState.progress[cat.id]?.length || 0, t);
+        const arr = GameState.progress[cat.id] || [];
+        const d = Math.min(arr.length, t);
         total += t; done += d;
-        if (!next && t > 0 && d < t) next = cat;
+        if (!next && t > 0 && d < t) {
+            next = cat;
+            for (let i = 0; i < t; i++) if (!arr.includes(i)) { nextIdx = i; break; }
+        }
     });
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-    const toFa = n => String(n).replace(/\d/g, x => '۰۱۲۳۴۵۶۷۸۹'[x]);
-    document.getElementById('hero-ring').style.setProperty('--p', percent);
-    document.getElementById('hero-percent').textContent = `${toFa(percent)}٪`;
-    const btn = document.getElementById('btn-hero-continue');
+    document.getElementById('continue-percent').textContent = `${toFaDigits(percent)}٪`;
+    document.getElementById('continue-ring').style.setProperty('--p', percent);
+    const label = document.getElementById('continue-label'), sub = document.getElementById('continue-sub');
     if (next) {
-        document.getElementById('hero-title').textContent = `${getDisplayName()}، آماده‌ای؟`;
-        document.getElementById('hero-sub').textContent = `${toFa(done)} از ${toFa(total)} مرحله رو حل کردی؛ مرحله‌ی بعدی توی «${next.name}» منتظرته`;
-        btn.classList.remove('hidden');
+        label.textContent = done > 0 ? 'ادامه بازی' : 'شروع بازی';
+        sub.textContent = `${next.name} · مرحله ${toFaDigits(nextIdx + 1)}`;
         btn.onclick = () => { AudioEngine.tap(); requireChannelJoin(() => startCategory(next)); };
     } else {
-        document.getElementById('hero-title').textContent = 'همه‌ی مرحله‌ها تموم شد 🎉';
-        document.getElementById('hero-sub').textContent = total > 0 ? 'فعلاً همه‌ی مرحله‌ها رو حل کردی! به‌زودی مرحله‌های جدید میاد.' : '';
-        btn.classList.add('hidden');
-        btn.onclick = null;
+        label.textContent = 'مرحله‌ها';
+        sub.textContent = total > 0 ? 'همه‌ی مرحله‌ها رو حل کردی 🎉' : 'به‌زودی مرحله‌های جدید میاد';
+        btn.onclick = () => openCategories();
     }
 }
 
+// بنر بزرگ وسط صفحه: درصد پیشرفت کل بازی + دکمه‌ی ادامه (اولین دسته‌ی ناتمام)
 // جشن گرفتن جایزه: چند سکه‌ی فنری از روی المان می‌پرن بیرون
 function coinBurst(anchor) {
     if (!anchor) return;
@@ -1312,7 +1263,7 @@ function validateSuggestion(f) {
 }
 
 function buildSuggestionText(f) {
-    return `نام شما (اختیاری): ${f.name}\nایده و یا انتقاد شما: ${f.idea}\nایموجی های پیشنهادی: ${f.emojis}`;
+    return `نام شما(اختیاری): ${f.name}\nایده و یا انتقاد شما: ${f.idea}\nایموجی های پیشنهادی: ${f.emojis}`;
 }
 
 // برمی‌گرداند: { ok: true } یا { ok: false, reason: 'not-configured' | 'network' | 'server' }
@@ -1324,7 +1275,7 @@ async function sendSuggestion(f) {
         date: new Date().toISOString(), appVersion: APP_VERSION
     });
     try {
-        const res = await fetchWithTimeout(`https://kvdb.io/${SUGGESTIONS_BUCKET_ID}/${key}`, { method: 'PUT', body });
+        const res = await fetch(`https://kvdb.io/${SUGGESTIONS_BUCKET_ID}/${key}`, { method: 'PUT', body });
         return res.ok ? { ok: true } : { ok: false, reason: 'server' };
     } catch (e) {
         return { ok: false, reason: 'network' };
@@ -1445,7 +1396,58 @@ function renderProfile() {
     document.querySelectorAll('.gender-option').forEach(el => {
         el.classList.toggle('selected', el.dataset.gender === gender);
     });
+    renderProfileStats();
 }
+
+// آمار، پیشرفت و افتخارات بازیکن (فقط خواندنی؛ هیچ داده‌ای تغییر نمی‌کند)
+function renderProfileStats() {
+    const fa = n => Number(n).toLocaleString('fa-IR');
+    const solved = getTotalCompleted(GameState);
+    let totalLevels = 0;
+    DB.categories.forEach(c => { totalLevels += c.levels.length; });
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('stat-coins', fa(GameState.globalScore));
+    set('stat-earned', fa(GameState.totalEarned || 0));
+    set('stat-stars', fa(getTotalStars()));
+    set('stat-solved', fa(solved));
+    set('stat-daily', fa(GameState.dailyChallenge?.completedCount || 0));
+    set('stat-medals', `${fa(GameState.unlockedMedals.length)}/${fa(MEDALS_DB.length)}`);
+
+    const ranks = [[200, '👑 افسانه‌ی ایموجی'], [120, '🎓 استاد ایموجی'], [50, '🧠 باهوش'], [10, '🔍 کنجکاو'], [0, '🌱 تازه‌وارد']];
+    set('profile-rank', (ranks.find(r => solved >= r[0]) || ranks[ranks.length - 1])[1]);
+
+    const perc = totalLevels > 0 ? Math.min(100, (solved / totalLevels) * 100) : 0;
+    const fill = document.getElementById('profile-progress-fill');
+    if (fill) fill.style.width = perc + '%';
+    set('profile-progress-txt', `${fa(solved)} از ${fa(totalLevels)} مرحله (${fa(Math.round(perc))}٪)`);
+
+    const catBox = document.getElementById('profile-cat-progress');
+    if (catBox) {
+        catBox.innerHTML = '';
+        DB.categories.filter(c => c.levels.length > 0).forEach(c => {
+            const d = Math.min(GameState.progress[c.id]?.length || 0, c.levels.length);
+            const row = document.createElement('div');
+            row.className = `profile-cat-row cat-${c.id}`;
+            row.innerHTML = `<span class="pc-ico"></span><span class="pc-name">${c.name}</span><div class="progress-track"><div class="progress-fill" style="width:${(d / c.levels.length) * 100}%"></div></div><span class="pc-num">${fa(d)}/${fa(c.levels.length)}</span>`;
+            setAppleEmoji(row.querySelector('.pc-ico'), c.icon);
+            catBox.appendChild(row);
+        });
+    }
+
+    const medalBox = document.getElementById('profile-medals');
+    if (medalBox) {
+        medalBox.innerHTML = '';
+        MEDALS_DB.forEach(m => {
+            const on = GameState.unlockedMedals.includes(m.id);
+            const chip = document.createElement('div');
+            chip.className = `profile-medal ${on ? 'unlocked' : 'locked'}`;
+            chip.title = m.name;
+            setAppleEmoji(chip, m.icon);
+            medalBox.appendChild(chip);
+        });
+    }
+}
+
 
 // نمای کشویی تبلیغ کانال‌ها: از روی آرایه CHANNEL_PROMOS کارت می‌سازد،
 // امکان سوایپ افقی می‌دهد، نقطه‌های پایین را با اسکرول همگام می‌کند و هر ۵
@@ -1889,6 +1891,7 @@ function handleBack() {
         openLevelSelect(GameState.activeCategory);
         return;
     }
+    if (id === 'screen-levels') { openCategories(true); return; }
     goBackToHome();
 }
 
@@ -2010,7 +2013,7 @@ function renderLevel() {
         keyUnits.push(...shuffledBank.slice(0, decoyCount));
     } else {
         while (keyUnits.length < Math.max(24, requiredUnits.length + 6)) {
-            keyUnits.push(DECOY_ALPHABET[Math.floor(Math.random() * DECOY_ALPHABET.length)]);
+            keyUnits.push(PERSIAN_ALPHABET[Math.floor(Math.random() * PERSIAN_ALPHABET.length)]);
         }
     }
     keyUnits.sort(() => Math.random() - 0.5);
@@ -2173,8 +2176,10 @@ function checkWin() {
         }
         
         document.getElementById('modal-success').classList.remove('hidden');
+        if (window.RZ && window.RZ.celebrate) window.RZ.celebrate();
     } else {
         AudioEngine.error();
+        if (window.RZ && window.RZ.wrong) window.RZ.wrong();
         const area = document.getElementById('answer-slots');
         area.classList.remove('shake');
         void area.offsetWidth;
@@ -2206,7 +2211,7 @@ function checkMedals() {
 ========================================= */
 function setupEvents() {
     document.getElementById('btn-back-home').addEventListener('click', handleBack);
-    document.getElementById('btn-back-levels').addEventListener('click', goBackToHome);
+    document.getElementById('btn-back-levels').addEventListener('click', () => { AudioEngine.tap(); openCategories(true); });
     setupSuggestionsPage();
     document.getElementById('btn-stars-info').addEventListener('click', () => {
         AudioEngine.tap();
@@ -2284,14 +2289,7 @@ function setupEvents() {
     document.getElementById('toggle-sound').addEventListener('change', e => { GameState.settings.sound = e.target.checked; StorageManager.save(); });
 
     // صفحه پروفایل: با لمس آواتار/اسم کاربر در هدر باز می‌شود
-    document.getElementById('user-info-trigger').addEventListener('click', () => {
-        AudioEngine.tap();
-        renderProfile();
-        showScreen('screen-profile');
-        if (window.Eitaa && window.Eitaa.WebApp && window.Eitaa.WebApp.BackButton) {
-            window.Eitaa.WebApp.BackButton.show();
-        }
-    });
+    document.getElementById('user-info-trigger').addEventListener('click', openProfile);
     document.getElementById('btn-back-profile').addEventListener('click', goBackToHome);
     document.querySelectorAll('.gender-option').forEach(el => {
         el.addEventListener('click', () => {
@@ -2674,7 +2672,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     try {
         const res = await fetch('data.json?v=' + APP_VERSION);
-        if (!res.ok) throw new Error('data.json HTTP ' + res.status);
         DB = await res.json();
     } catch (e) {
         DB = { categories: [{ id: "proverbs", name: "ضرب‌المثل‌ها", icon: "🎭", levels: [{ emoji: "👂🏻🚪👂🏻🥅", answer: "یه گوشش دره یه گوشش دروازه" }] }] };
