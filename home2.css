@@ -1,0 +1,293 @@
+/* =====================================================
+   RAZAK 2.0 — صفحه‌ی اصلی «جهان ایموجی»
+   -----------------------------------------------------
+   بعد از style.css و theme.css لود می‌شود و فقط روی #screen-home اثر دارد؛
+   بقیه‌ی صفحه‌ها و مودال‌ها دست‌نخورده می‌مانند. صفحه‌ی اصلی در هر دو تم
+   روشن/تاریک همین هویت «نیمه‌شب بنفش» را دارد.
+===================================================== */
+
+#screen-home {
+    /* رنگ‌های اختصاصی صفحه‌ی اصلی (فقط داخل همین صفحه) */
+    --rz-midnight: #0b0b2e;
+    --rz-indigo: #1a1052;
+    --rz-purple: #3b1a86;
+    --rz-violet: #7b3fe4;
+    --rz-gold: #ffc83d;
+    --rz-gold-deep: #e8960c;
+    --rz-green: #34e07a;
+    --rz-green-deep: #14a653;
+
+    /* کارت‌ها/متن‌های قدیمی (دسته‌بندی، مدال، کانال) روی پس‌زمینه‌ی تیره خوانا شوند */
+    --bg-main: #14103f;
+    --card-bg: rgba(255, 255, 255, 0.09);
+    --text-main: #f4f1ff;
+    --text-muted: rgba(226, 218, 255, 0.72);
+    --border-color: rgba(255, 255, 255, 0.16);
+    --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 10px 26px rgba(5, 2, 30, 0.45);
+
+    background: linear-gradient(180deg, var(--rz-midnight) 0%, var(--rz-indigo) 38%, var(--rz-purple) 78%, #4a1f9c 100%);
+    color: var(--text-main);
+    isolation: isolate;
+}
+
+/* ---------- پس‌زمینه‌ی کیهانی ---------- */
+/* .screen دارای transform است، پس position:fixed داخلش با اسکرول جابه‌جا می‌شد؛
+   به‌جایش sticky: همیشه به اندازه‌ی یک صفحه پشت محتوا می‌ماند. */
+.rz-sky {
+    position: sticky; top: 0; z-index: -1; overflow: hidden; pointer-events: none;
+    width: 100%; height: 100vh; height: 100svh; margin-bottom: -100vh; margin-bottom: -100svh;
+}
+.rz-stars {
+    position: absolute; inset: -50% 0 0 0;
+    background-image:
+        radial-gradient(1.6px 1.6px at 12% 20%, #fff 50%, transparent 51%),
+        radial-gradient(1.2px 1.2px at 28% 62%, rgba(255,255,255,.85) 50%, transparent 51%),
+        radial-gradient(2px 2px at 44% 14%, #ffe9a8 50%, transparent 51%),
+        radial-gradient(1.2px 1.2px at 63% 48%, #fff 50%, transparent 51%),
+        radial-gradient(1.8px 1.8px at 78% 22%, rgba(255,255,255,.9) 50%, transparent 51%),
+        radial-gradient(1.2px 1.2px at 90% 70%, #cbb8ff 50%, transparent 51%),
+        radial-gradient(1.4px 1.4px at 8% 84%, rgba(255,255,255,.8) 50%, transparent 51%),
+        radial-gradient(1.6px 1.6px at 55% 88%, #ffe9a8 50%, transparent 51%);
+    background-size: 340px 340px;
+    animation: rz-twinkle 5s ease-in-out infinite alternate;
+}
+@keyframes rz-twinkle { from { opacity: .45; } to { opacity: 1; } }
+.rz-glow { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55; }
+.rz-glow-a { width: 320px; height: 320px; top: -80px; right: -90px; background: #6a35e8; animation: rz-drift 14s ease-in-out infinite alternate; }
+.rz-glow-b { width: 360px; height: 360px; bottom: -120px; left: -120px; background: #1f6bff; opacity: .4; animation: rz-drift 17s ease-in-out infinite alternate-reverse; }
+@keyframes rz-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(24px, 34px) scale(1.12); } }
+
+.rz-floaters { position: absolute; inset: 0; }
+.rz-floater {
+    position: absolute; width: var(--s, 44px); height: var(--s, 44px);
+    left: var(--x); top: var(--y);
+    opacity: var(--o, .5);
+    filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.4)) saturate(1.1);
+    animation: rz-float var(--d, 9s) ease-in-out var(--delay, 0s) infinite alternate;
+    will-change: transform;
+}
+.rz-floater img, .rz-floater span { width: 100%; height: 100%; display: block; font-size: var(--s, 44px); line-height: 1; animation: none !important; }
+@keyframes rz-float {
+    from { transform: translate3d(0, 0, 0) rotate(var(--r0, -8deg)); }
+    to   { transform: translate3d(var(--dx, 10px), -22px, 0) rotate(var(--r1, 10deg)); }
+}
+
+/* ---------- چیدمان صفحه ---------- */
+.rz-page { position: relative; max-width: 520px; margin: 0 auto; padding: 0 18px calc(34px + env(safe-area-inset-bottom)); }
+
+.rz-topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top)) 0 10px;
+    margin: 0 -18px; padding-inline: 18px;
+    background: linear-gradient(180deg, rgba(11, 11, 46, 0.82), rgba(11, 11, 46, 0));
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.rz-user { min-width: 0; gap: 10px; }
+.rz-user .avatar { width: 46px; height: 46px; flex-shrink: 0; border: 2px solid rgba(255, 255, 255, 0.55); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+.rz-user .user-text { min-width: 0; }
+.rz-user .greeting { color: var(--text-muted); font-size: .72rem; }
+.rz-user #user-name { color: #fff; font-size: .98rem; max-width: 26vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.rz-stats { gap: 7px; }
+
+/* چیپ‌های ستاره و سکه */
+.rz-chip {
+    position: relative; overflow: hidden;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 11px; border-radius: 999px;
+    font-size: .98rem; font-weight: 900; font-variant-numeric: tabular-nums;
+    color: #fff; background: rgba(255, 255, 255, 0.12);
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.rz-chip-stars { border-color: rgba(255, 214, 90, .65); }
+.rz-chip-coins { border-color: var(--rz-gold); color: var(--rz-gold); background: rgba(255, 200, 61, 0.14); }
+.rz-chip-coins span { color: #fff6d6; }
+.rz-gear {
+    width: 44px; height: 44px; font-size: 1.35rem;
+    background: rgba(255, 255, 255, 0.12); color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.rz-gear:active { transform: translateY(3px); box-shadow: 0 0 0 rgba(0,0,0,.28); }
+#screen-home #btn-open-settings.has-reminder::after { border-color: var(--rz-indigo); }
+
+/* ---------- بخش اصلی (یک صفحه‌ی کامل) ---------- */
+.rz-hero {
+    position: relative;
+    min-height: calc(100vh - 70px - env(safe-area-inset-top));
+    min-height: calc(100svh - 70px - env(safe-area-inset-top));
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    gap: 14px; padding: 6px 0 20px;
+}
+
+/* لوگو */
+.rz-logo { text-align: center; position: relative; padding-top: 4px; }
+.rz-logo-emoji {
+    width: 84px; height: 84px; margin: 0 auto -10px; position: relative; z-index: 2;
+    font-size: 78px; line-height: 84px;
+    filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 18px rgba(255, 200, 61, 0.45));
+    animation: rz-bob 3.2s ease-in-out infinite;
+}
+.rz-logo-emoji img, .rz-logo-emoji span { width: 100%; height: 100%; display: block; animation: none !important; font-size: inherit; line-height: inherit; }
+@keyframes rz-bob {
+    0%, 100% { transform: translateY(0) rotate(-6deg); }
+    50% { transform: translateY(-12px) rotate(7deg); }
+}
+.rz-logo-text {
+    position: relative; z-index: 1;
+    font-family: var(--font-display, var(--font-ios)); font-weight: 1000; font-size: clamp(3rem, 15vw, 4.4rem);
+    letter-spacing: 3px; line-height: 1.05; direction: ltr;
+    background: linear-gradient(180deg, #fff6c9 0%, var(--rz-gold) 45%, var(--rz-gold-deep) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    -webkit-text-stroke: 1.5px rgba(70, 25, 140, 0.55);
+    filter: drop-shadow(0 4px 0 #5b1fb8) drop-shadow(0 8px 0 #3a1280) drop-shadow(0 16px 18px rgba(0, 0, 0, 0.5));
+}
+.rz-logo-sub {
+    margin-top: 4px; font-weight: 800; font-size: 1rem; color: #d9ccff; letter-spacing: .3px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* حالت‌های بازی */
+.rz-modes { width: 100%; display: flex; flex-direction: column; gap: 11px; }
+.rz-mode {
+    position: relative; width: 100%; border: 0; cursor: pointer; font-family: inherit; color: #fff;
+    display: flex; align-items: center; gap: 12px; text-align: right;
+    padding: 12px 14px; border-radius: 22px;
+    background: linear-gradient(160deg, var(--c1), var(--c2));
+    box-shadow: 0 5px 0 var(--c3), 0 12px 20px -6px rgba(0, 0, 0, 0.55), inset 0 2px 0 rgba(255, 255, 255, 0.35);
+    transition: transform .1s var(--spring, ease-out), box-shadow .1s;
+    overflow: hidden;
+}
+.rz-mode::after {
+    content: ""; position: absolute; inset: 0 0 55% 0; border-radius: 22px 22px 60% 60%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0)); pointer-events: none;
+}
+.rz-mode:active { transform: translateY(5px); box-shadow: 0 0 0 var(--c3), 0 6px 12px -6px rgba(0,0,0,.55), inset 0 2px 0 rgba(255,255,255,.3); }
+.rz-mode-daily { --c1: #ff8a3d; --c2: #ff4f6d; --c3: #b3243f; }
+.rz-mode-emoji { --c1: #6fa8ff; --c2: #5b4dff; --c3: #2f25b3; }
+.rz-mode-board { --c1: #b078ff; --c2: #7b3fe4; --c3: #4a1d9a; }
+.rz-mode-daily.done { --c1: #3be58a; --c2: #12a39a; --c3: #0b6b66; }
+.rz-mode-ico {
+    flex-shrink: 0; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center;
+    font-size: 2rem; background: rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 3px 8px rgba(0, 0, 0, 0.25);
+    animation: rz-wiggle 4s ease-in-out infinite;
+}
+.rz-mode-emoji .rz-mode-ico { animation-delay: .6s; }
+.rz-mode-board .rz-mode-ico { animation-delay: 1.2s; }
+@keyframes rz-wiggle { 0%, 80%, 100% { transform: rotate(0); } 86% { transform: rotate(-9deg) scale(1.08); } 93% { transform: rotate(8deg) scale(1.08); } }
+.rz-mode-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; position: relative; z-index: 1; }
+.rz-mode-title { font-weight: 900; font-size: 1.12rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.22); }
+.rz-mode-sub { font-size: .8rem; line-height: 1.45; color: rgba(255, 255, 255, 0.92); font-weight: 600; }
+.rz-mode-badge { font-size: .72rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.28); color: #fff; text-shadow: none; }
+.rz-soon { background: rgba(255, 200, 61, 0.9); color: #5a3a00; }
+
+/* دکمه‌ی شروع بازی (طلایی/سبز، درخشان) */
+.rz-start {
+    position: relative; width: 100%; border: 0; cursor: pointer; font-family: inherit; overflow: hidden;
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center;
+    justify-items: start; padding: 14px 22px; border-radius: 28px; color: #07351c;
+    background: linear-gradient(180deg, #8dffb4 0%, var(--rz-green) 45%, #1fc060 100%);
+    box-shadow: 0 7px 0 var(--rz-green-deep), 0 16px 26px -6px rgba(0, 0, 0, 0.6), 0 0 0 3px rgba(255, 255, 255, 0.25),
+        0 0 34px rgba(52, 224, 122, 0.55), inset 0 3px 0 rgba(255, 255, 255, 0.6);
+    transition: transform .1s var(--spring, ease-out), box-shadow .1s;
+    animation: rz-pulse 2.4s ease-in-out infinite;
+}
+.rz-start:active { transform: translateY(7px); box-shadow: 0 0 0 var(--rz-green-deep), 0 6px 12px -4px rgba(0,0,0,.6), 0 0 0 3px rgba(255,255,255,.25), inset 0 3px 0 rgba(255,255,255,.5); animation: none; }
+@keyframes rz-pulse {
+    0%, 100% { box-shadow: 0 7px 0 var(--rz-green-deep), 0 16px 26px -6px rgba(0,0,0,.6), 0 0 0 3px rgba(255,255,255,.25), 0 0 24px rgba(52,224,122,.4), inset 0 3px 0 rgba(255,255,255,.6); }
+    50% { box-shadow: 0 7px 0 var(--rz-green-deep), 0 16px 26px -6px rgba(0,0,0,.6), 0 0 0 3px rgba(255,255,255,.35), 0 0 46px rgba(52,224,122,.8), inset 0 3px 0 rgba(255,255,255,.6); }
+}
+.rz-start-shine {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.55) 50%, transparent 62%);
+    transform: translateX(-130%); animation: rz-shine 3.6s ease-in-out infinite;
+}
+@keyframes rz-shine { 0%, 55% { transform: translateX(-130%); } 85%, 100% { transform: translateX(130%); } }
+.rz-start-ico { grid-row: 1 / span 2; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; font-size: 1.4rem; color: #fff; background: #0f9a4a; box-shadow: inset 0 2px 0 rgba(255,255,255,.35), 0 3px 0 #0a6e33; padding-right: 3px; transform: scaleX(-1); }
+.rz-start-label { font-weight: 1000; font-size: 1.7rem; line-height: 1.1; text-shadow: 0 2px 0 rgba(255, 255, 255, 0.45); }
+.rz-start-sub { font-size: .8rem; font-weight: 800; opacity: .8; min-height: 1em; }
+
+/* دکمه‌های پایین: فروشگاه و سکه رایگان */
+.rz-dock { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rz-dock-btn {
+    position: relative; border: 0; cursor: pointer; font-family: inherit; color: #fff;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 8px 11px; border-radius: 24px;
+    background: linear-gradient(170deg, var(--c1), var(--c2));
+    box-shadow: 0 5px 0 var(--c3), 0 12px 18px -6px rgba(0, 0, 0, 0.55), inset 0 2px 0 rgba(255, 255, 255, 0.35);
+    transition: transform .1s var(--spring, ease-out), box-shadow .1s;
+}
+.rz-dock-btn:active { transform: translateY(5px); box-shadow: 0 0 0 var(--c3), inset 0 2px 0 rgba(255,255,255,.3); }
+.rz-dock-shop { --c1: #ff7ad1; --c2: #c33bd6; --c3: #7a1c8c; }
+.rz-dock-free { --c1: #ffd34d; --c2: #f59a0c; --c3: #a35d00; }
+.rz-dock-ico { font-size: 2.9rem; line-height: 1.1; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.35)); animation: rz-bob 3.6s ease-in-out infinite; }
+.rz-dock-free .rz-dock-ico { animation-delay: .8s; }
+.rz-dock-label { font-weight: 900; font-size: 1.02rem; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+.rz-dock-free.has-reminder::after {
+    content: ""; position: absolute; top: 9px; left: 11px; width: 15px; height: 15px; border-radius: 50%;
+    background: #ff3b30; border: 2px solid #fff; animation: reminderPulse 1.6s ease-in-out infinite;
+}
+
+.rz-scroll-hint {
+    border: 0; background: none; color: rgba(255, 255, 255, 0.7); font-size: 1.8rem; line-height: 1; cursor: pointer;
+    animation: rz-nudge 1.8s ease-in-out infinite; margin-top: -4px;
+}
+@keyframes rz-nudge { 0%, 100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(6px); opacity: 1; } }
+
+/* ---------- بخش‌های پایین‌تر (مدال‌ها، دسته‌بندی‌ها، کانال‌ها) ---------- */
+.rz-below { padding: 0 0 20px; max-width: none; }
+#screen-home .section-header h2 { color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+#screen-home .badge { background: rgba(255, 255, 255, 0.16); color: #fff; }
+
+#screen-home .category-card {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3), 0 12px 22px -8px rgba(0, 0, 0, 0.5);
+    border-radius: 24px; overflow: hidden;
+}
+#screen-home .category-card::before, #screen-home .category-card::after { display: none; } /* شکاف‌های بلیت روی گرادینت جا نمی‌افتند */
+#screen-home .category-card:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+#screen-home .cat-icon { filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.35)); }
+#screen-home .progress-track { background: rgba(255, 255, 255, 0.16); }
+#screen-home .progress-fill { background: linear-gradient(90deg, #6fa8ff, #b078ff); }
+#screen-home .category-card.completed .progress-fill { background: linear-gradient(90deg, #34e07a, #8dffb4); }
+
+#screen-home .medal-card {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+    border: 1.5px solid rgba(255, 255, 255, 0.14);
+}
+#screen-home .medal-card.unlocked { border-color: var(--rz-gold); box-shadow: 0 0 18px rgba(255, 200, 61, 0.35); }
+#screen-home .medal-card::after { border-top-color: rgba(255,255,255,.25); }
+#screen-home .medal-card.unlocked::after { border-top-color: var(--rz-gold); }
+
+#screen-home .channel-promo-dot { background: rgba(255, 255, 255, 0.3); }
+#screen-home .channel-promo-dot.active { background: var(--rz-gold); }
+
+/* گوشی‌های کوتاه */
+@media (max-height: 700px) {
+    .rz-logo-emoji { width: 64px; height: 64px; font-size: 60px; line-height: 64px; }
+    .rz-logo-text { font-size: 3rem; }
+    .rz-mode { padding: 9px 12px; }
+    .rz-mode-ico { width: 44px; height: 44px; font-size: 1.7rem; }
+    .rz-dock-ico { font-size: 2.3rem; }
+    .rz-start { padding: 10px 20px; }
+}
+@media (max-width: 360px) {
+    .rz-stats { gap: 5px; }
+    .rz-chip { padding: 5px 8px; font-size: .88rem; }
+    .rz-user .user-text { display: none; }
+}
+
+/* کم‌تحرکی: همه‌ی انیمیشن‌های صفحه‌ی اصلی خاموش */
+@media (prefers-reduced-motion: reduce) {
+    .rz-stars, .rz-glow, .rz-floater, .rz-logo-emoji, .rz-mode-ico, .rz-start, .rz-start-shine,
+    .rz-dock-ico, .rz-scroll-hint, #screen-home .score-pill::after { animation: none !important; }
+    .rz-mode, .rz-start, .rz-dock-btn { transition: none !important; }
+}
+
+/* اصلاحات ریز */
+#rz-categories { scroll-margin-top: 78px; }
+#screen-home #btn-open-settings.has-reminder::after { top: -3px; right: -3px; width: 13px; height: 13px; border: 2px solid #fff; }
