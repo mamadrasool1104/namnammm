@@ -1,25 +1,25 @@
 // =====================================================
-// رازک ۲.۰ — چسب رابط کاربری (بعد از app.js لود می‌شود)
+// RAZAK 2.0 — چسب صفحه‌ی اصلی جدید (بعد از app.js لود می‌شود)
 // =====================================================
-// منطق بازی، ذخیره‌سازی و دیتابیس اینجا دست نمی‌خورد. این فایل فقط:
-//   ۱) پس‌زمینه‌ی ایموجی‌های شناور و ایموجی لوگو را می‌سازد،
-//   ۲) نوار پایین (خانه / مرحله‌ها / جایزه‌ها / پروفایل) را به توابع app.js وصل می‌کند،
-//   ۳) افکت برد (کانفتی) و باخت (چشمک قرمز) را فراهم می‌کند.
+// منطق بازی را دست نمی‌زند: فقط (۱) renderHome را می‌پیچد تا ستاره‌ها و دکمه‌ی
+// «شروع بازی» هم به‌روز شوند، (۲) دکمه‌های جدید را به توابع موجود app.js وصل
+// می‌کند، (۳) ایموجی‌های شناور پس‌زمینه را می‌سازد.
 (function () {
     'use strict';
 
     const $ = id => document.getElementById(id);
+    const toFa = n => String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
     const tap = () => { try { AudioEngine.tap(); } catch (e) {} };
-    const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const soon = (icon, text) => { try { showToast(icon, text); } catch (e) {} };
 
-    /* ---------- ۱) ایموجی‌های شناور (با همان موتور ایموجی اپل بازی) ---------- */
+    /* ---------- ۱) ایموجی‌های شناور (از همان موتور ایموجی اپل بازی) ---------- */
     const FLOATERS = [
         // [ایموجی، x%، y%، اندازه، شفافیت، مدت، تأخیر]
-        ['🎬', 6, 14, 46, .5, 9, 0], ['🌍', 82, 10, 52, .5, 11, 1.2],
-        ['🍿', 88, 38, 40, .42, 8, .6], ['🎭', 3, 42, 44, .45, 10, 2],
-        ['💡', 78, 62, 42, .45, 9.5, 1.8], ['🧩', 10, 68, 48, .45, 12, .3],
-        ['🚀', 86, 84, 46, .5, 10, 2.4], ['🎯', 40, 90, 38, .38, 8.5, 1],
-        ['✨', 52, 6, 30, .55, 7, .4], ['🪐', 22, 90, 44, .4, 13, 1.5]
+        ['🎬', 6, 14, 46, .55, 9, 0], ['🌍', 82, 10, 52, .55, 11, 1.2],
+        ['🍿', 88, 38, 40, .45, 8, .6], ['🎭', 3, 42, 44, .5, 10, 2],
+        ['💡', 78, 62, 42, .5, 9.5, 1.8], ['🧩', 10, 68, 48, .5, 12, .3],
+        ['🚀', 86, 84, 46, .55, 10, 2.4], ['🎯', 40, 90, 38, .4, 8.5, 1],
+        ['✨', 52, 6, 30, .6, 7, .4], ['🪐', 22, 90, 44, .45, 13, 1.5]
     ];
     function buildFloaters() {
         const wrap = $('rz-floaters');
@@ -29,104 +29,112 @@
             el.className = 'rz-floater';
             el.style.cssText = `--x:${x}%;--y:${y}%;--s:${size}px;--o:${o};--d:${d}s;--delay:${delay}s;` +
                 `--dx:${i % 2 ? -14 : 14}px;--r0:${i % 2 ? 8 : -8}deg;--r1:${i % 2 ? -10 : 10}deg`;
-            try { el.appendChild(buildEmojiImg(emoji)); } catch (e) { el.textContent = emoji; }
+            try { el.appendChild(buildEmojiImg(emoji)); }
+            catch (e) { el.textContent = emoji; }
             wrap.appendChild(el);
         });
     }
-    function paintEmojis() {
-        const logo = $('rz-logo-emoji');
-        if (logo) { try { renderAppleEmojis(logo, '🤔'); } catch (e) {} }
-        document.querySelectorAll('.rz-tab-ico[data-emoji]').forEach(el => {
-            try { renderAppleEmojis(el, el.dataset.emoji); } catch (e) {}
-        });
+    function buildLogoEmoji() {
+        const el = $('rz-logo-emoji');
+        if (!el) return;
+        try { renderAppleEmojis(el, '🤔'); } catch (e) { /* همان متن 🤔 می‌ماند */ }
     }
 
-    /* ---------- ۲) نوار پایین ---------- */
-    const TAB_OF_SCREEN = {
-        'screen-home': 'home', 'screen-categories': 'levels', 'screen-levels': 'levels',
-        'screen-rewards': 'rewards', 'screen-profile': 'profile'
-    };
-    function markTab(screenId) {
-        const tab = TAB_OF_SCREEN[screenId];
-        document.querySelectorAll('.rz-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    /* ---------- ۲) آمار: ستاره‌های کل + وضعیت دکمه‌ی شروع ---------- */
+    function totalStars() {
+        let sum = 0;
+        try {
+            DB.categories.forEach(cat => {
+                for (let i = 0; i < cat.levels.length; i++) sum += getLevelStars(cat.id, i);
+            });
+        } catch (e) {}
+        return sum;
     }
-    function openTab(tab) {
-        const active = document.querySelector('.rz-tab.active');
-        if (active && active.dataset.tab === tab) {            // لمس دوباره‌ی همان تب → برگشت به بالای صفحه
-            const scr = document.querySelector('.screen.active');
-            if (scr) scr.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
+
+    // اولین دسته‌ی ناتمام (همان منطق renderHeroBanner قدیمی)
+    function findNextCategory() {
+        let done = 0, total = 0, next = null;
+        try {
+            DB.categories.forEach(cat => {
+                const t = cat.levels.length;
+                const d = Math.min(GameState.progress[cat.id]?.length || 0, t);
+                total += t; done += d;
+                if (!next && t > 0 && d < t) next = cat;
+            });
+        } catch (e) {}
+        return { next, done, total };
+    }
+
+    function updateHomeExtras() {
+        const starsEl = $('home-total-stars');
+        if (starsEl) starsEl.textContent = totalStars();
+
+        const { next, done, total } = findNextCategory();
+        const label = $('rz-start-label'), sub = $('rz-start-sub');
+        if (!label || !sub) return;
+        if (!total) { label.textContent = 'شروع بازی'; sub.textContent = ''; }
+        else if (next) {
+            label.textContent = done > 0 ? 'ادامه بازی' : 'شروع بازی';
+            sub.textContent = `«${next.name}» · ${toFa(done)} از ${toFa(total)} مرحله`;
+        } else {
+            label.textContent = 'مرحله‌ها';
+            sub.textContent = 'همه‌ی مرحله‌ها رو حل کردی 🎉';
         }
-        if (tab === 'home') { goBackToHome(); }
-        else if (tab === 'levels') { openCategories(); }
-        else if (tab === 'rewards') { openRewardsScreen(); }
-        else if (tab === 'profile') { openProfile(); }
     }
 
-    window.RZ = {
-        onScreen: markTab,
+    // renderHome را می‌پیچیم؛ رفتار قبلی عیناً اجرا می‌شود و بعدش آمار جدید.
+    const origRenderHome = window.renderHome;
+    if (typeof origRenderHome === 'function') {
+        window.renderHome = function () {
+            const r = origRenderHome.apply(this, arguments);
+            try { updateHomeExtras(); } catch (e) {}
+            return r;
+        };
+    }
+    // امتیاز/ستاره بعد از هر برد هم تازه می‌شود (برگشت به خانه renderHome را صدا می‌زند)
 
-        // جشن برد: چند ایموجی که از وسط صفحه پخش می‌شوند (سبک و کوتاه‌مدت)
-        celebrate() {
-            if (reduceMotion()) return;
-            const fx = document.createElement('div');
-            fx.className = 'rz-fx';
-            const set = ['🎉', '⭐', '✨', '🪙', '🎊', '💫'];
-            for (let i = 0; i < 26; i++) {
-                const p = document.createElement('span');
-                p.className = 'rz-confetti';
-                p.textContent = set[i % set.length];
-                const ang = (Math.PI * 2 * i) / 26 + Math.random() * 0.4;
-                const dist = 120 + Math.random() * 150;
-                p.style.cssText = `--tx:${Math.cos(ang) * dist}px;--ty:${Math.sin(ang) * dist + 60}px;--rot:${(Math.random() - .5) * 540}deg;` +
-                    `font-size:${18 + Math.random() * 16}px;animation-delay:${Math.random() * 0.12}s`;
-                fx.appendChild(p);
-            }
-            document.body.appendChild(fx);
-            setTimeout(() => fx.remove(), 1700);
-        },
-
-        // خطا: حاشیه‌ی قرمز کوتاه دور صفحه
-        wrong() {
-            if (reduceMotion()) return;
-            const fx = document.createElement('div');
-            fx.className = 'rz-fx';
-            fx.innerHTML = '<div class="rz-wrong-flash"></div>';
-            document.body.appendChild(fx);
-            setTimeout(() => fx.remove(), 700);
-        }
-    };
-
+    /* ---------- ۳) اتصال دکمه‌ها ---------- */
     function wire() {
-        document.querySelectorAll('.rz-tab').forEach(b => b.addEventListener('click', () => { tap(); openTab(b.dataset.tab); }));
+        // شروع بازی = ادامه از اولین دسته‌ی ناتمام (با همان گیت عضویت اجباری)
+        const startBtn = $('btn-start-game');
+        if (startBtn) startBtn.addEventListener('click', () => {
+            tap();
+            const { next } = findNextCategory();
+            const target = next || (DB.categories.find(c => c.levels.length > 0));
+            if (!target) { soon('⏳', 'به‌زودی مرحله‌های جدید میاد'); return; }
+            requireChannelJoin(() => next ? startCategory(next) : openLevelSelect(target));
+        });
 
-        const levels = $('btn-mode-levels');
-        if (levels) levels.addEventListener('click', () => openCategories());
+        // چالش ایموجی = لیست دسته‌بندی‌ها
+        const goCats = () => { tap(); const el = $('rz-categories'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+        const emojiBtn = $('btn-mode-emoji'); if (emojiBtn) emojiBtn.addEventListener('click', goCats);
+        const hint = $('rz-scroll-hint'); if (hint) hint.addEventListener('click', goCats);
 
-        // «برترین‌ها» هنوز در بازی وجود ندارد → پیام «به‌زودی» (عملکرد جعلی نمی‌سازیم)
+        // این دو قابلیت هنوز در بازی وجود ندارند → پیام «به‌زودی» (بدون ساختن عملکرد جعلی)
         const board = $('btn-mode-leaderboard');
-        if (board) board.addEventListener('click', () => { tap(); try { showToast('🏆', 'جدول برترین‌ها به‌زودی میاد'); } catch (e) {} });
+        if (board) board.addEventListener('click', () => { tap(); soon('🏆', 'جدول برترین‌ها به‌زودی میاد'); });
+        const shop = $('btn-shop');
+        if (shop) shop.addEventListener('click', () => { tap(); soon('🛍️', 'فروشگاه به‌زودی باز می‌شه'); });
 
-        // سکه رایگان = همان پنجره‌ی «جایزه» (جایزه‌ی روزانه + کانال‌ها)
+        // سکه رایگان = همان پنجره‌ی «جایزه»
         const free = $('btn-free-coins');
-        if (free) free.addEventListener('click', () => { const o = $('btn-open-rewards'); if (o) o.click(); });
+        if (free) free.addEventListener('click', () => {
+            const opener = $('btn-open-rewards');
+            if (opener) opener.click();
+        });
 
-        // نقطه‌ی قرمز «جایزه‌ی روزانه آماده است» روی تب جایزه‌ها و دکمه‌ی سکه رایگان
+        // نقطه‌ی قرمز «جایزه‌ی روزانه آماده است» روی دکمه‌ی سکه رایگان هم بیاید
         const gear = $('btn-open-settings');
-        if (gear && window.MutationObserver) {
-            const rewardsTab = document.querySelector('.rz-tab[data-tab="rewards"]');
-            const sync = () => {
-                const on = gear.classList.contains('has-reminder');
-                if (free) free.classList.toggle('has-reminder', on);
-                if (rewardsTab) rewardsTab.classList.toggle('has-reminder', on);
-            };
+        if (gear && free && window.MutationObserver) {
+            const sync = () => free.classList.toggle('has-reminder', gear.classList.contains('has-reminder'));
             new MutationObserver(sync).observe(gear, { attributes: true, attributeFilter: ['class'] });
             sync();
         }
     }
 
-    document.body.dataset.screen = 'screen-home';
     buildFloaters();
-    paintEmojis();
+    buildLogoEmoji();
     wire();
+    // اگر renderHome قبل از لود این فایل اجرا شده بود، یک‌بار هم اینجا آمار را پر کن
+    window.addEventListener('DOMContentLoaded', () => setTimeout(() => { try { updateHomeExtras(); } catch (e) {} }, 0));
 })();
