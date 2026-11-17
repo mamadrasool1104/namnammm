@@ -12,72 +12,124 @@
     <!-- فونت آراد از قبل روی خود سایت است (بدون وابستگی به سرور خارجی)، همین الان لود شروع شود -->
     <link rel="preload" href="fonts/AradVF.ttf" as="font" type="font/ttf" crossorigin>
 
-    <link rel="preload" href="data.json?v=1.15.0" as="fetch" crossorigin>
-    <link rel="stylesheet" href="style.css?v=1.15.0">
-    <link rel="stylesheet" href="theme.css?v=1.15.0">
+    <link rel="preload" href="data.json" as="fetch" crossorigin>
+    <link rel="stylesheet" href="style.css?v=1.14.1">
+    <link rel="stylesheet" href="theme.css?v=1.14.1">
+    <link rel="stylesheet" href="home2.css?v=2.0.0">
 
     <!-- Eitaa SDK: با defer لود می‌شود تا جلوی نمایش سریع صفحه را نگیرد -->
     <script src="https://developer.eitaa.com/eitaa-web-app.js" defer></script>
 </head>
 <body>
-    <!-- Screen 1: Home / Categories -->
+    <!-- Screen 1: Home — RAZAK 2.0 «جهان ایموجی» -->
     <div id="screen-home" class="screen active">
-        <header class="ios-header">
-            <div class="user-info" id="user-info-trigger">
-                <div class="avatar" id="user-avatar">👤</div>
-                <div class="user-text">
-                    <span class="greeting">سلام،</span>
-                    <strong id="user-name">کاربر عزیز</strong>
-                </div>
-            </div>
-            <div class="header-actions">
-                <div class="score-pill">🪙 <span id="home-total-score">0</span></div>
-                <button id="btn-open-settings" class="icon-btn ios-btn" aria-label="تنظیمات">⚙️</button>
-            </div>
-        </header>
+        <!-- پس‌زمینه‌ی کیهانی: گرادینت + ستاره + ایموجی‌های شناور (ایموجی‌ها را home2.js می‌سازد) -->
+        <div class="rz-sky" aria-hidden="true">
+            <div class="rz-stars"></div>
+            <div class="rz-glow rz-glow-a"></div>
+            <div class="rz-glow rz-glow-b"></div>
+            <div class="rz-floaters" id="rz-floaters"></div>
+        </div>
 
-        <main class="home-scroll">
-            <section class="daily-challenge-section">
-                <div class="daily-challenge-card" id="daily-challenge-card">
-                    <div class="daily-challenge-icon">🔥</div>
-                    <div class="daily-challenge-info">
-                        <div class="daily-challenge-top">
-                            <h3>سوال روزانه</h3>
-                            <span class="daily-badge" id="daily-badge">🔥 جدید</span>
-                        </div>
-                        <p id="daily-status-text">یه معمای ایموجی مخصوص امروز، هر روز عوض می‌شه</p>
+        <div class="rz-page">
+            <!-- نوار بالا: پروفایل، ستاره‌ها، سکه، تنظیمات -->
+            <header class="rz-topbar">
+                <div class="user-info rz-user" id="user-info-trigger">
+                    <div class="avatar" id="user-avatar">👤</div>
+                    <div class="user-text">
+                        <span class="greeting">سلام،</span>
+                        <strong id="user-name">کاربر عزیز</strong>
                     </div>
-                    <div class="daily-challenge-arrow">‹</div>
                 </div>
+                <div class="header-actions rz-stats">
+                    <div class="rz-chip rz-chip-stars" title="ستاره‌ها">⭐ <span id="home-total-stars">0</span></div>
+                    <div class="score-pill rz-chip rz-chip-coins" title="سکه‌ها">🪙 <span id="home-total-score">0</span></div>
+                    <button id="btn-open-settings" class="icon-btn ios-btn rz-gear" aria-label="تنظیمات">⚙️</button>
+                </div>
+            </header>
+
+            <!-- قسمت اصلی: لوگو، حالت‌های بازی، شروع بازی، فروشگاه/سکه رایگان -->
+            <section class="rz-hero">
+                <div class="rz-logo" aria-label="رازک">
+                    <div class="rz-logo-emoji" id="rz-logo-emoji" aria-hidden="true">🤔</div>
+                    <h1 class="rz-logo-text" data-text="RAZAK">RAZAK</h1>
+                    <div class="rz-logo-sub">بازی حدس ایموجی</div>
+                </div>
+
+                <div class="rz-modes">
+                    <!-- چالش روزانه (همان کارت قبلی؛ id و فرزندانش دست‌نخورده‌اند) -->
+                    <button type="button" class="rz-mode rz-mode-daily" id="daily-challenge-card">
+                        <span class="rz-mode-ico">⏱️</span>
+                        <span class="rz-mode-txt">
+                            <span class="rz-mode-title">چالش روزانه <span class="daily-badge rz-mode-badge" id="daily-badge">🔥 جدید</span></span>
+                            <span class="rz-mode-sub" id="daily-status-text">یه معمای ایموجی مخصوص امروز، هر روز عوض می‌شه</span>
+                        </span>
+                    </button>
+                    <button type="button" class="rz-mode rz-mode-emoji" id="btn-mode-emoji">
+                        <span class="rz-mode-ico">🧩</span>
+                        <span class="rz-mode-txt">
+                            <span class="rz-mode-title">چالش ایموجی</span>
+                            <span class="rz-mode-sub">دسته‌بندی‌ها و مرحله‌ها</span>
+                        </span>
+                    </button>
+                    <button type="button" class="rz-mode rz-mode-board" id="btn-mode-leaderboard">
+                        <span class="rz-mode-ico">🏆</span>
+                        <span class="rz-mode-txt">
+                            <span class="rz-mode-title">جدول برترین‌ها <span class="rz-mode-badge rz-soon">به‌زودی</span></span>
+                            <span class="rz-mode-sub">رتبه‌ی خودت رو بین بقیه ببین</span>
+                        </span>
+                    </button>
+                </div>
+
+                <button type="button" class="rz-start" id="btn-start-game">
+                    <span class="rz-start-shine" aria-hidden="true"></span>
+                    <span class="rz-start-ico">▶</span>
+                    <span class="rz-start-label" id="rz-start-label">شروع بازی</span>
+                    <span class="rz-start-sub" id="rz-start-sub"></span>
+                </button>
+
+                <nav class="rz-dock" aria-label="میانبرها">
+                    <button type="button" class="rz-dock-btn rz-dock-shop" id="btn-shop">
+                        <span class="rz-dock-ico">🛍️</span>
+                        <span class="rz-dock-label">فروشگاه</span>
+                    </button>
+                    <button type="button" class="rz-dock-btn rz-dock-free" id="btn-free-coins">
+                        <span class="rz-dock-ico">🎁</span>
+                        <span class="rz-dock-label">سکه رایگان</span>
+                    </button>
+                </nav>
+
+                <button type="button" class="rz-scroll-hint" id="rz-scroll-hint" aria-label="دسته‌بندی‌ها">⌄</button>
             </section>
 
-            <section class="medals-section">
-                <div class="section-header">
-                    <h2><span class="header-icon-emoji">🏆</span> افتخارات شما</h2>
-                    <span class="badge" id="medals-count">0/0</span>
-                </div>
-                <div class="medals-scroll" id="medals-container"></div>
-            </section>
+            <main class="home-scroll rz-below">
+                <section class="medals-section">
+                    <div class="section-header">
+                        <h2><span class="header-icon-emoji">🏆</span> افتخارات شما</h2>
+                        <span class="badge" id="medals-count">0/0</span>
+                    </div>
+                    <div class="medals-scroll" id="medals-container"></div>
+                </section>
 
-            <section class="categories-section">
-                <div class="section-header">
-                    <h2><span class="header-icon-emoji">🗂️</span> دسته‌بندی‌ها</h2>
-                </div>
-                <div class="categories-list" id="categories-container"></div>
-            </section>
+                <section class="categories-section" id="rz-categories">
+                    <div class="section-header">
+                        <h2><span class="header-icon-emoji">🗂️</span> دسته‌بندی‌ها</h2>
+                    </div>
+                    <div class="categories-list" id="categories-container"></div>
+                </section>
 
-            <section class="channel-promo-section">
-                <div class="section-header">
-                    <h2>
-                        <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ios-blue)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="var(--ios-blue)" stroke="none"/></svg>
-                        کانال‌های ما
-                    </h2>
-                </div>
-                <div class="channel-promo-scroll" id="channel-promo-container"></div>
-                <div class="channel-promo-dots" id="channel-promo-dots"></div>
-            </section>
-
-        </main>
+                <section class="channel-promo-section">
+                    <div class="section-header">
+                        <h2>
+                            <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>
+                            کانال‌های ما
+                        </h2>
+                    </div>
+                    <div class="channel-promo-scroll" id="channel-promo-container"></div>
+                    <div class="channel-promo-dots" id="channel-promo-dots"></div>
+                </section>
+            </main>
+        </div>
     </div>
 
     <!-- Screen 2: Game -->
@@ -471,10 +523,11 @@
             }
         });
     </script>
-    <script src="partner.js?v=1.15.0"></script>
-    <script src="index.js?v=1.15.0"></script>
-    <script src="channel-photos.js?v=1.15.0"></script>
-    <script src="reward-channels.js?v=1.15.0"></script>
-    <script src="app.js?v=1.15.0"></script>
+    <script src="partner.js?v=1.14.1"></script>
+    <script src="index.js?v=1.14.1"></script>
+    <script src="channel-photos.js?v=1.14.1"></script>
+    <script src="reward-channels.js?v=1.14.1"></script>
+    <script src="app.js?v=1.14.1"></script>
+    <script src="home2.js?v=2.0.0"></script>
 </body>
 </html>
