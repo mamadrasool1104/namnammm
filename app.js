@@ -1065,8 +1065,8 @@ function renderHome() {
     const starsEl = document.getElementById('home-total-stars');
     if (starsEl) starsEl.textContent = getTotalStars();
 
-    renderMedals();
-    renderCategories();
+    // مدال‌ها و فهرست دسته‌بندی‌ها فقط وقتی صفحه‌شان باز می‌شود ساخته می‌شوند
+    // (openRewardsScreen / openCategories) تا صفحه‌ی اصلی سبک بماند.
     renderContinue();
     renderDailyChallengeCard();
     renderChannelPromos();
