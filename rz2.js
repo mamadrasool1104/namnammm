@@ -13,25 +13,24 @@
     const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     /* ---------- ۱) ایموجی‌های شناور (با همان موتور ایموجی اپل بازی) ---------- */
+    // فقط ۵ ایموجی ثابت (بدون انیمیشن، بدون دانلود تصویر): متن ایموجی خود سیستم است
     const FLOATERS = [
-        // [ایموجی، x%، y%، اندازه، شفافیت، مدت، تأخیر]
-        ['🎬', 6, 14, 46, .5, 9, 0], ['🌍', 82, 10, 52, .5, 11, 1.2],
-        ['🍿', 88, 38, 40, .42, 8, .6], ['🎭', 3, 42, 44, .45, 10, 2],
-        ['💡', 78, 62, 42, .45, 9.5, 1.8], ['🧩', 10, 68, 48, .45, 12, .3],
-        ['🚀', 86, 84, 46, .5, 10, 2.4], ['🎯', 40, 90, 38, .38, 8.5, 1],
-        ['✨', 52, 6, 30, .55, 7, .4], ['🪐', 22, 90, 44, .4, 13, 1.5]
+        // [ایموجی، x%، y%، اندازه، شفافیت]
+        ['🎬', 6, 14, 40, .42], ['🌍', 82, 10, 44, .42], ['🎭', 3, 46, 38, .36],
+        ['🚀', 86, 80, 40, .42], ['🧩', 10, 82, 40, .38]
     ];
     function buildFloaters() {
         const wrap = $('rz-floaters');
         if (!wrap || wrap.childElementCount) return;
-        FLOATERS.forEach(([emoji, x, y, size, o, d, delay], i) => {
+        const frag = document.createDocumentFragment();
+        FLOATERS.forEach(([emoji, x, y, size, o]) => {
             const el = document.createElement('div');
             el.className = 'rz-floater';
-            el.style.cssText = `--x:${x}%;--y:${y}%;--s:${size}px;--o:${o};--d:${d}s;--delay:${delay}s;` +
-                `--dx:${i % 2 ? -14 : 14}px;--r0:${i % 2 ? 8 : -8}deg;--r1:${i % 2 ? -10 : 10}deg`;
-            try { el.appendChild(buildEmojiImg(emoji)); } catch (e) { el.textContent = emoji; }
-            wrap.appendChild(el);
+            el.style.cssText = `--x:${x}%;--y:${y}%;--s:${size}px;--o:${o}`;
+            el.textContent = emoji;
+            frag.appendChild(el);
         });
+        wrap.appendChild(frag);
     }
     function paintEmojis() {
         const logo = $('rz-logo-emoji');
@@ -72,11 +71,11 @@
             const fx = document.createElement('div');
             fx.className = 'rz-fx';
             const set = ['🎉', '⭐', '✨', '🪙', '🎊', '💫'];
-            for (let i = 0; i < 26; i++) {
+            for (let i = 0; i < 12; i++) {
                 const p = document.createElement('span');
                 p.className = 'rz-confetti';
                 p.textContent = set[i % set.length];
-                const ang = (Math.PI * 2 * i) / 26 + Math.random() * 0.4;
+                const ang = (Math.PI * 2 * i) / 12 + Math.random() * 0.4;
                 const dist = 120 + Math.random() * 150;
                 p.style.cssText = `--tx:${Math.cos(ang) * dist}px;--ty:${Math.sin(ang) * dist + 60}px;--rot:${(Math.random() - .5) * 540}deg;` +
                     `font-size:${18 + Math.random() * 16}px;animation-delay:${Math.random() * 0.12}s`;
@@ -126,7 +125,8 @@
     }
 
     document.body.dataset.screen = 'screen-home';
-    buildFloaters();
     paintEmojis();
     wire();
+    // پس‌زمینه‌ی تزئینی بعد از اولین نمایش صفحه (وقتی مرورگر بیکار شد) ساخته می‌شود
+    (window.requestIdleCallback ? window.requestIdleCallback(buildFloaters, { timeout: 1500 }) : setTimeout(buildFloaters, 600));
 })();
